@@ -956,17 +956,17 @@ fun PrivacyPolicyDialog(
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             InfoChip(label = "华昊科技有限公司", icon = Icons.Filled.Business)
-                            InfoChip(label = "鲁ICP备2026018166号-2A", icon = Icons.Filled.FileText)
+                            InfoChip(label = "鲁ICP备2026018166号-2A", icon = Icons.Filled.FilePresent)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             InfoChip(label = "support@smsforwarder.cn", icon = Icons.Filled.Mail)
-                            InfoChip(label = "smsforwarder.cn", icon = Icons.Filled.Globe)
+                            InfoChip(label = "smsforwarder.cn", icon = Icons.Filled.Public)
                         }
                     }
                     
                     PolicySection(title = "核心原则", icon = Icons.Filled.CheckCircle) {
-                        Grid(modifier = Modifier.fillMaxWidth(), columns = 2) {
+                        GridRow {
                             PrincipleCard(
                                 icon = Icons.Filled.CloudOff,
                                 title = "不上云",
@@ -979,14 +979,17 @@ fun PrivacyPolicyDialog(
                                 desc = "不收集敏感数据",
                                 color = Color(0xFF6366F1)
                             )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GridRow {
                             PrincipleCard(
-                                icon = Icons.Filled.EyeOff,
+                                icon = Icons.Filled.VisibilityOff,
                                 title = "不追踪",
                                 desc = "无统计广告SDK",
                                 color = Color(0xFFF59E0B)
                             )
                             PrincipleCard(
-                                icon = Icons.Filled.Hand,
+                                icon = Icons.Filled.Gesture,
                                 title = "完全可控",
                                 desc = "权限自主管理",
                                 color = Color(0xFFEC4899)
@@ -994,7 +997,7 @@ fun PrivacyPolicyDialog(
                         }
                     }
                     
-                    PolicySection(title = "信息收集与使用", icon = Icons.Filled.Database) {
+                    PolicySection(title = "信息收集与使用", icon = Icons.Filled.DataObject) {
                         PolicySubtitle("*短信内容（敏感信息）")
                         Text("用途：仅在您的手机本地用于匹配关键词规则和执行转发", lineHeight = 18.sp)
                         Text("存储：不会保存到任何服务器，仅在转发时临时处理", lineHeight = 18.sp)
@@ -1012,7 +1015,7 @@ fun PrivacyPolicyDialog(
                     }
                     
                     PolicySection(title = "权限说明", icon = Icons.Filled.Key) {
-                        PermissionGrid {
+                        GridRow {
                             PermissionItem(
                                 icon = Icons.Filled.Message,
                                 title = "短信权限",
@@ -1025,6 +1028,9 @@ fun PrivacyPolicyDialog(
                                 desc = "显示服务运行状态",
                                 required = true
                             )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GridRow {
                             PermissionItem(
                                 icon = Icons.Filled.Phone,
                                 title = "手机状态",
@@ -1037,6 +1043,9 @@ fun PrivacyPolicyDialog(
                                 desc = "防止后台被杀死",
                                 required = false
                             )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GridRow {
                             PermissionItem(
                                 icon = Icons.Filled.NetworkWifi,
                                 title = "网络权限",
@@ -1059,7 +1068,7 @@ fun PrivacyPolicyDialog(
                         )
                     }
                     
-                    PolicySection(title = "数据存储", icon = Icons.Filled.HardDrive) {
+                    PolicySection(title = "数据存储", icon = Icons.Filled.Storage) {
                         PolicySubtitle("本地存储")
                         Text("所有数据都存储在您手机的私有目录中，包括：", lineHeight = 18.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1075,12 +1084,12 @@ fun PrivacyPolicyDialog(
                         
                         PolicySubtitle("服务器存储")
                         PolicyHighlight(
-                            icon = Icons.Filled.ShieldCheck,
+                            icon = Icons.Filled.Verified,
                             text = "我们没有服务器存储您的数据！应用是纯本地运行的工具，我们不收集、不存储、不上传任何用户数据。"
                         )
                     }
                     
-                    PolicySection(title = "您的权利", icon = Icons.Filled.User) {
+                    PolicySection(title = "您的权利", icon = Icons.Filled.Person) {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             PolicyBullet("查看数据：可以在应用内查看所有转发日志")
                         }
@@ -1223,9 +1232,8 @@ private fun PolicyBullet(text: String) {
             modifier = Modifier
                 .size(6.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
-            contentAlignment = Alignment.Center
-        )
+                .background(MaterialTheme.colorScheme.primary)
+        ) {}
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             text,
@@ -1275,28 +1283,9 @@ private fun InfoChip(label: String, icon: ImageVector) {
 }
 
 @Composable
-private fun Grid(modifier: Modifier = Modifier, columns: Int, content: @Composable () -> Unit) {
-    Layout(
-        modifier = modifier,
-        content = content
-    ) { measurables, constraints ->
-        val columnWidth = constraints.maxWidth / columns
-        val itemConstraints = constraints.copy(maxWidth = columnWidth)
-        val placeables = measurables.map { it.measure(itemConstraints) }
-        val rowHeight = placeables.maxOf { it.height }
-        val rows = (placeables.size + columns - 1) / columns
-        val totalHeight = rowHeight * rows + 8.dp.toPx() * (rows - 1)
-        
-        layout(constraints.maxWidth, totalHeight.toInt()) {
-            placeables.forEachIndexed { index, placeable ->
-                val row = index / columns
-                val col = index % columns
-                placeable.placeRelative(
-                    x = col * columnWidth,
-                    y = (row * (rowHeight + 8.dp.toPx())).toInt()
-                )
-            }
-        }
+private fun GridRow(content: @Composable () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        content()
     }
 }
 
@@ -1314,10 +1303,9 @@ private fun PrincipleCard(icon: ImageVector, title: String, desc: String, color:
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(color.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
+                    .background(color.copy(alpha = 0.15f))
             ) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = color)
+                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp).align(Alignment.Center), tint = color)
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
@@ -1327,31 +1315,7 @@ private fun PrincipleCard(icon: ImageVector, title: String, desc: String, color:
     }
 }
 
-@Composable
-private fun PermissionGrid(content: @Composable () -> Unit) {
-    Layout(
-        modifier = Modifier.fillMaxWidth(),
-        content = content
-    ) { measurables, constraints ->
-        val columnWidth = constraints.maxWidth / 2
-        val itemConstraints = constraints.copy(maxWidth = columnWidth)
-        val placeables = measurables.map { it.measure(itemConstraints) }
-        val rowHeight = placeables.maxOf { it.height }
-        val rows = (placeables.size + 1) / 2
-        val totalHeight = rowHeight * rows + 8.dp.toPx() * (rows - 1)
-        
-        layout(constraints.maxWidth, totalHeight.toInt()) {
-            placeables.forEachIndexed { index, placeable ->
-                val row = index / 2
-                val col = index % 2
-                placeable.placeRelative(
-                    x = col * columnWidth,
-                    y = (row * (rowHeight + 8.dp.toPx())).toInt()
-                )
-            }
-        }
-    }
-}
+
 
 @Composable
 private fun PermissionItem(icon: ImageVector, title: String, desc: String, required: Boolean) {
@@ -1369,13 +1333,12 @@ private fun PermissionItem(icon: ImageVector, title: String, desc: String, requi
                 .background(
                     if (required) Color(0xFF22C55E).copy(alpha = 0.1f) 
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
+                )
+            ) {
             Icon(
                 icon, 
                 contentDescription = null, 
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(18.dp).align(Alignment.Center),
                 tint = if (required) Color(0xFF22C55E) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
