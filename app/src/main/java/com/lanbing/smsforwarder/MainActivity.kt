@@ -883,154 +883,285 @@ fun PrivacyPolicyDialog(
     isViewOnly: Boolean = false
 ) {
     Dialog(onDismissRequest = { if (isViewOnly) onAgree() }) {
-        Card(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.9f)
+                .fillMaxHeight(0.92f)
                 .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            elevation = CardDefaults.cardElevation(8.dp)
+            shape = RoundedCornerShape(28.dp),
+            shadowElevation = 24.dp,
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(modifier = Modifier.fillMaxHeight()) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF667EEA).copy(alpha = 0.1f)),
+                        .fillMaxWidth()
+                        .padding(32.dp)
+                        .padding(bottom = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Filled.Shield,
-                        contentDescription = null,
-                        tint = Color(0xFF667EEA),
-                        modifier = Modifier.size(28.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(Color(0xFF667EEA), Color(0xFF764BA2))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Shield,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+                
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    Text(
+                        "隐私政策",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "最后更新时间：2026年4月6日",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "隐私政策",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                Divider(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 )
-                Text(
-                    "最后更新时间：2026年4月6日",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
                 PolicyScrollableColumn(modifier = Modifier.weight(1f)) {
-                    PolicySection(title = "概述") {
-                        Text("短信转发助手（以下简称\"我们\"）非常重视用户的隐私保护。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的应用即表示您同意本政策中描述的做法。")
+                    PolicySection(title = "概述", icon = Icons.Filled.Info) {
+                        Text(
+                            "短信转发助手（以下简称\"我们\"）非常重视用户的隐私保护。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的应用即表示您同意本政策中描述的做法。",
+                            lineHeight = 20.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            InfoChip(label = "华昊科技有限公司", icon = Icons.Filled.Business)
+                            InfoChip(label = "鲁ICP备2026018166号-2A", icon = Icons.Filled.FileText)
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
-                        PolicyBullet("应用名称：短信转发助手")
-                        PolicyBullet("开发者：华昊科技有限公司")
-                        PolicyBullet("联系邮箱：support@smsforwarder.cn")
-                        PolicyBullet("官方网站：https://smsforwarder.cn/")
-                        PolicyBullet("备案号：鲁ICP备2026018166号-2A")
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            InfoChip(label = "support@smsforwarder.cn", icon = Icons.Filled.Mail)
+                            InfoChip(label = "smsforwarder.cn", icon = Icons.Filled.Globe)
+                        }
                     }
                     
-                    PolicySection(title = "核心原则") {
-                        Text("我们的承诺：")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        PolicyBullet("不上云：所有数据都在您的手机本地处理，不会上传到我们的服务器")
-                        PolicyBullet("不收集：不会收集您的个人信息、短信内容等敏感数据")
-                        PolicyBullet("不追踪：不集成任何统计、分析或广告 SDK")
-                        PolicyBullet("完全可控：所有权限和数据都由您自己掌控")
+                    PolicySection(title = "核心原则", icon = Icons.Filled.CheckCircle) {
+                        Grid(modifier = Modifier.fillMaxWidth(), columns = 2) {
+                            PrincipleCard(
+                                icon = Icons.Filled.CloudOff,
+                                title = "不上云",
+                                desc = "数据本地处理",
+                                color = Color(0xFF22C55E)
+                            )
+                            PrincipleCard(
+                                icon = Icons.Filled.DeleteForever,
+                                title = "不收集",
+                                desc = "不收集敏感数据",
+                                color = Color(0xFF6366F1)
+                            )
+                            PrincipleCard(
+                                icon = Icons.Filled.EyeOff,
+                                title = "不追踪",
+                                desc = "无统计广告SDK",
+                                color = Color(0xFFF59E0B)
+                            )
+                            PrincipleCard(
+                                icon = Icons.Filled.Hand,
+                                title = "完全可控",
+                                desc = "权限自主管理",
+                                color = Color(0xFFEC4899)
+                            )
+                        }
                     }
                     
-                    PolicySection(title = "信息收集与使用") {
+                    PolicySection(title = "信息收集与使用", icon = Icons.Filled.Database) {
                         PolicySubtitle("*短信内容（敏感信息）")
-                        Text("用途：仅在您的手机本地用于匹配关键词规则和执行转发")
-                        Text("存储：不会保存到任何服务器，仅在转发时临时处理")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        PolicyHighlight("重要：唯一会发送短信内容的情况是您主动配置了 Webhook 转发目标（如企业微信、钉钉、飞书或自定义 Webhook），应用会将短信直接发送到您指定的目标，不会经过我们的服务器。")
+                        Text("用途：仅在您的手机本地用于匹配关键词规则和执行转发", lineHeight = 18.sp)
+                        Text("存储：不会保存到任何服务器，仅在转发时临时处理", lineHeight = 18.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        PolicyHighlight(
+                            icon = Icons.Filled.Warning,
+                            text = "重要：唯一会发送短信内容的情况是您主动配置了 Webhook 转发目标（如企业微信、钉钉、飞书或自定义 Webhook），应用会将短信直接发送到您指定的目标，不会经过我们的服务器。"
+                        )
                         
                         PolicySubtitle("配置信息")
-                        Text("您设置的转发通道、关键词规则等配置信息保存在您手机的本地存储中，不会上传。")
+                        Text("您设置的转发通道、关键词规则等配置信息保存在您手机的本地存储中，不会上传。", lineHeight = 18.sp)
                         
                         PolicySubtitle("转发日志")
-                        Text("应用会在本地记录转发历史（最多200条），方便您查看和调试，这些日志仅存储在您的手机上。")
+                        Text("应用会在本地记录转发历史（最多200条），方便您查看和调试，这些日志仅存储在您的手机上。", lineHeight = 18.sp)
                     }
                     
-                    PolicySection(title = "权限说明") {
-                        PolicyBullet("接收短信权限：监听设备收到的短信，用于执行转发功能")
-                        PolicyBullet("读取手机状态权限：用于识别双卡手机的 SIM 卡信息和获取本机号码（可选）")
-                        PolicyBullet("通知权限：显示前台服务通知，让您知道服务正在运行")
-                        PolicyBullet("网络权限：仅用于转发到您配置的 Webhook")
-                        PolicyBullet("开机自启权限：让应用在开机后自动启动转发服务（可选）")
-                        PolicyBullet("前台服务权限：保持应用在后台稳定运行")
-                        PolicyBullet("忽略电池优化权限：防止系统杀死后台服务（可选）")
-                        PolicyBullet("访问网络状态权限：检测网络连接状态")
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("所有权限都需要您主动授权，您可以随时在系统设置中撤销。")
+                    PolicySection(title = "权限说明", icon = Icons.Filled.Key) {
+                        PermissionGrid {
+                            PermissionItem(
+                                icon = Icons.Filled.Message,
+                                title = "短信权限",
+                                desc = "监听并识别短信",
+                                required = true
+                            )
+                            PermissionItem(
+                                icon = Icons.Filled.Notifications,
+                                title = "通知权限",
+                                desc = "显示服务运行状态",
+                                required = true
+                            )
+                            PermissionItem(
+                                icon = Icons.Filled.Phone,
+                                title = "手机状态",
+                                desc = "识别双卡SIM信息",
+                                required = false
+                            )
+                            PermissionItem(
+                                icon = Icons.Filled.BatteryFull,
+                                title = "电池优化",
+                                desc = "防止后台被杀死",
+                                required = false
+                            )
+                            PermissionItem(
+                                icon = Icons.Filled.NetworkWifi,
+                                title = "网络权限",
+                                desc = "转发到Webhook",
+                                required = true
+                            )
+                            PermissionItem(
+                                icon = Icons.Filled.PowerSettingsNew,
+                                title = "开机自启",
+                                desc = "自动启动服务",
+                                required = false
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "所有权限都需要您主动授权，您可以随时在系统设置中撤销。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp
+                        )
                     }
                     
-                    PolicySection(title = "数据存储") {
+                    PolicySection(title = "数据存储", icon = Icons.Filled.HardDrive) {
                         PolicySubtitle("本地存储")
-                        Text("所有数据都存储在您手机的私有目录中，包括：")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        PolicyBullet("转发通道和关键词配置")
-                        PolicyBullet("转发历史日志")
-                        PolicyBullet("应用设置")
+                        Text("所有数据都存储在您手机的私有目录中，包括：", lineHeight = 18.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("转发通道和关键词配置")
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("转发历史日志")
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("应用设置")
+                        }
                         
                         PolicySubtitle("服务器存储")
-                        PolicyHighlight("我们没有服务器存储您的数据！应用是纯本地运行的工具，我们不收集、不存储、不上传任何用户数据。")
+                        PolicyHighlight(
+                            icon = Icons.Filled.ShieldCheck,
+                            text = "我们没有服务器存储您的数据！应用是纯本地运行的工具，我们不收集、不存储、不上传任何用户数据。"
+                        )
                     }
                     
-                    PolicySection(title = "您的权利") {
-                        PolicyBullet("查看数据：可以在应用内查看所有转发日志")
-                        PolicyBullet("删除数据：可以在应用内清空日志，或卸载应用删除所有数据")
-                        PolicyBullet("控制权限：可以在系统设置中随时授予或撤销权限")
-                        PolicyBullet("撤回同意：可以在应用设置中撤回隐私政策同意")
+                    PolicySection(title = "您的权利", icon = Icons.Filled.User) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("查看数据：可以在应用内查看所有转发日志")
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("删除数据：可以在应用内清空日志，或卸载应用删除所有数据")
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("控制权限：可以在系统设置中随时授予或撤销权限")
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            PolicyBullet("撤回同意：可以在应用设置中撤回隐私政策同意")
+                        }
                     }
                     
-                    PolicySection(title = "第三方服务") {
-                        PolicyHighlight("关于转发目标：如果您配置了 Webhook 或其他第三方服务作为转发目标，短信内容会发送到该第三方。请您谨慎选择转发目标，并确保了解其隐私政策。我们不对第三方的数据处理负责。")
+                    PolicySection(title = "第三方服务", icon = Icons.Filled.Share) {
+                        PolicyHighlight(
+                            icon = Icons.Filled.Link,
+                            text = "关于转发目标：如果您配置了 Webhook 或其他第三方服务作为转发目标，短信内容会发送到该第三方。请您谨慎选择转发目标，并确保了解其隐私政策。我们不对第三方的数据处理负责。"
+                        )
                         
                         PolicySubtitle("第三方 SDK")
-                        Text("当前版本未集成任何第三方 SDK（包括统计、广告、崩溃分析等）。")
+                        Text("当前版本未集成任何第三方 SDK（包括统计、广告、崩溃分析等）。", lineHeight = 18.sp)
                     }
                     
-                    PolicySection(title = "政策更新") {
-                        Text("我们可能会不时更新本隐私政策。重大变更时，我们会通过应用内通知或其他方式告知您。建议您定期查看本政策以了解最新信息。")
+                    PolicySection(title = "政策更新", icon = Icons.Filled.Update) {
+                        Text("我们可能会不时更新本隐私政策。重大变更时，我们会通过应用内通知或其他方式告知您。建议您定期查看本政策以了解最新信息。", lineHeight = 18.sp)
                     }
                     
-                    PolicySection(title = "联系我们") {
-                        Text("如果您对本隐私政策有任何疑问或建议，请通过以下方式联系我们：")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("邮箱：support@smsforwarder.cn")
+                    PolicySection(title = "联系我们", icon = Icons.Filled.ContactMail) {
+                        Text("如果您对本隐私政策有任何疑问或建议，请通过以下方式联系我们：", lineHeight = 18.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Mail, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("support@smsforwarder.cn", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
                 
-                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                if (isViewOnly) {
-                    Button(
-                        onClick = onAgree,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("关闭") }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    if (isViewOnly) {
                         Button(
                             onClick = onAgree,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Text("同意") }
-                        OutlinedButton(
-                            onClick = onDisagree,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Text("不同意") }
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 14.dp)
+                        ) { Text("关闭", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = onAgree,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF667EEA),
+                                    contentColor = Color.White
+                                )
+                            ) { Text("同意", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                            OutlinedButton(
+                                onClick = onDisagree,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 14.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                            ) { Text("不同意", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
@@ -1042,22 +1173,34 @@ private fun PolicyScrollableColumn(modifier: Modifier = Modifier, content: @Comp
     Column(
         modifier = modifier
             .verticalScroll(scrollState)
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 24.dp)
     ) {
         content()
     }
 }
 
 @Composable
-private fun PolicySection(title: String, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.padding(bottom = 16.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+private fun PolicySection(title: String, icon: ImageVector, content: @Composable () -> Unit) {
+    Column(modifier = Modifier.padding(bottom = 20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         content()
     }
 }
@@ -1069,41 +1212,184 @@ private fun PolicySubtitle(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
+        modifier = Modifier.padding(top = 14.dp, bottom = 8.dp)
     )
 }
 
 @Composable
 private fun PolicyBullet(text: String) {
-    Row(modifier = Modifier.padding(bottom = 4.dp)) {
-        Text(
-            "• ",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(modifier = Modifier.padding(bottom = 6.dp)) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center
         )
+        Spacer(modifier = Modifier.width(10.dp))
         Text(
             text,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 18.sp
         )
     }
 }
 
 @Composable
-private fun PolicyHighlight(text: String) {
+private fun PolicyHighlight(icon: ImageVector, text: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF667EEA).copy(alpha = 0.08f))
-            .padding(12.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f))
+            .padding(14.dp)
+            .clip(RoundedCornerShape(12.dp))
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium
-        )
+        Row {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 19.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun InfoChip(label: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(20.dp))
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun Grid(modifier: Modifier = Modifier, columns: Int, content: @Composable () -> Unit) {
+    Layout(
+        modifier = modifier,
+        content = content
+    ) { measurables, constraints ->
+        val columnWidth = constraints.maxWidth / columns
+        val itemConstraints = constraints.copy(maxWidth = columnWidth)
+        val placeables = measurables.map { it.measure(itemConstraints) }
+        val rowHeight = placeables.maxOf { it.height }
+        val rows = (placeables.size + columns - 1) / columns
+        val totalHeight = rowHeight * rows + 8.dp.toPx() * (rows - 1)
+        
+        layout(constraints.maxWidth, totalHeight.toInt()) {
+            placeables.forEachIndexed { index, placeable ->
+                val row = index / columns
+                val col = index % columns
+                placeable.placeRelative(
+                    x = col * columnWidth,
+                    y = (row * (rowHeight + 8.dp.toPx())).toInt()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrincipleCard(icon: ImageVector, title: String, desc: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color.copy(alpha = 0.08f))
+            .padding(16.dp)
+            .clip(RoundedCornerShape(16.dp))
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = color)
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun PermissionGrid(content: @Composable () -> Unit) {
+    Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = content
+    ) { measurables, constraints ->
+        val columnWidth = constraints.maxWidth / 2
+        val itemConstraints = constraints.copy(maxWidth = columnWidth)
+        val placeables = measurables.map { it.measure(itemConstraints) }
+        val rowHeight = placeables.maxOf { it.height }
+        val rows = (placeables.size + 1) / 2
+        val totalHeight = rowHeight * rows + 8.dp.toPx() * (rows - 1)
+        
+        layout(constraints.maxWidth, totalHeight.toInt()) {
+            placeables.forEachIndexed { index, placeable ->
+                val row = index / 2
+                val col = index % 2
+                placeable.placeRelative(
+                    x = col * columnWidth,
+                    y = (row * (rowHeight + 8.dp.toPx())).toInt()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionItem(icon: ImageVector, title: String, desc: String, required: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(12.dp)
+            .clip(RoundedCornerShape(12.dp))
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (required) Color(0xFF22C55E).copy(alpha = 0.1f) 
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon, 
+                contentDescription = null, 
+                modifier = Modifier.size(18.dp),
+                tint = if (required) Color(0xFF22C55E) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (required) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("*", style = MaterialTheme.typography.labelSmall, color = Color(0xFFEF4444))
+                }
+            }
+            Text(desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
