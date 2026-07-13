@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.7.9-blue.svg)
+![Version](https://img.shields.io/badge/version-2.7.10-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -49,6 +49,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.7.10** | 隐私合规整改：添加首次运行隐私政策弹窗；在关于页面添加隐私政策查看入口；修复小米应用商店审核问题 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.9** | 隐私合规整改：优化权限申请时机，首次打开不再主动弹窗请求权限；用户点击开启服务时先显示权限说明对话框，引导用户到系统设置手动开启；移除直接系统权限请求弹窗 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.8** | 电量提醒消息添加SIM卡手机号标识，便于区分设备；修复飞书消息格式问题；低电量和高电量提醒可独立配置开关和阈值 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.7** | 修复SIM卡设置页面电话权限状态不实时更新问题；添加电话权限友好提示；添加开机自启动友好提示；更新隐私政策；新增电量提醒功能；优化APK大小；增强代码健壮性 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |

@@ -49,6 +49,7 @@ object Constants {
     const val PREF_HIGHLIGHT_VERIFICATION_CODE = "highlight_verification_code"
     const val PREF_CUSTOM_SIM1_PHONE = "custom_sim1_phone"
     const val PREF_CUSTOM_SIM2_PHONE = "custom_sim2_phone"
+    const val PREF_PRIVACY_AGREED = "privacy_agreed"
 
     // 电量提醒
     const val PREF_BATTERY_REMINDER_ENABLED = "battery_reminder_enabled"

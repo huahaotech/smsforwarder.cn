@@ -33,13 +33,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -235,6 +239,14 @@ fun SmsForwarderApp(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBootTipDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(Unit) {
+        val hasAgreedPrivacy = prefs.getBoolean(Constants.PREF_PRIVACY_AGREED, false)
+        if (!hasAgreedPrivacy) {
+            showPrivacyDialog = true
+        }
+    }
     
     // 定义5个标签页
     val tabs = listOf(
@@ -551,6 +563,10 @@ fun SmsForwarderApp(
                             prefs.edit().putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, highBatteryThreshold).apply()
                         },
                         onShowTestDialog = { showTestDialog = true },
+                        onRevokePrivacyConsent = {
+                            prefs.edit().remove(Constants.PREF_PRIVACY_AGREED).apply()
+                            (context as Activity).finish()
+                        },
                         permissionUpdateTrigger = permissionUpdateTrigger
                     )
                     4 -> LogTab(
@@ -719,7 +735,13 @@ fun SmsForwarderApp(
 
     // 关于对话框
     if (showAboutDialog) {
-        AboutDialog(onDismiss = { showAboutDialog = false })
+        AboutDialog(
+            onDismiss = { showAboutDialog = false },
+            onShowPrivacyPolicy = {
+                showAboutDialog = false
+                showPrivacyDialog = true
+            }
+        )
     }
     
     // 开机自启动提示对话框
@@ -778,6 +800,23 @@ fun SmsForwarderApp(
             }
         )
     }
+    
+    // 隐私政策弹窗
+    if (showPrivacyDialog) {
+        val isPrivacyRequired = !prefs.getBoolean(Constants.PREF_PRIVACY_AGREED, false)
+        PrivacyPolicyDialog(
+            onAgree = {
+                showPrivacyDialog = false
+                if (isPrivacyRequired) {
+                    prefs.edit().putBoolean(Constants.PREF_PRIVACY_AGREED, true).apply()
+                }
+            },
+            onDisagree = {
+                (context as Activity).finish()
+            },
+            isViewOnly = !isPrivacyRequired
+        )
+    }
 }
 
 @Composable
@@ -834,6 +873,237 @@ fun PermissionExplanationDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PrivacyPolicyDialog(
+    onAgree: () -> Unit,
+    onDisagree: () -> Unit,
+    isViewOnly: Boolean = false
+) {
+    Dialog(onDismissRequest = { if (isViewOnly) onAgree() }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxHeight()) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF667EEA).copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFF667EEA),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "隐私政策",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "最后更新时间：2026年4月6日",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                PolicyScrollableColumn(modifier = Modifier.weight(1f)) {
+                    PolicySection(title = "概述") {
+                        Text("短信转发助手（以下简称\"我们\"）非常重视用户的隐私保护。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的应用即表示您同意本政策中描述的做法。")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PolicyBullet("应用名称：短信转发助手")
+                        PolicyBullet("开发者：华昊科技有限公司")
+                        PolicyBullet("联系邮箱：support@smsforwarder.cn")
+                        PolicyBullet("官方网站：https://smsforwarder.cn/")
+                        PolicyBullet("备案号：鲁ICP备2026018166号-2A")
+                    }
+                    
+                    PolicySection(title = "核心原则") {
+                        Text("我们的承诺：")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PolicyBullet("不上云：所有数据都在您的手机本地处理，不会上传到我们的服务器")
+                        PolicyBullet("不收集：不会收集您的个人信息、短信内容等敏感数据")
+                        PolicyBullet("不追踪：不集成任何统计、分析或广告 SDK")
+                        PolicyBullet("完全可控：所有权限和数据都由您自己掌控")
+                    }
+                    
+                    PolicySection(title = "信息收集与使用") {
+                        PolicySubtitle("*短信内容（敏感信息）")
+                        Text("用途：仅在您的手机本地用于匹配关键词规则和执行转发")
+                        Text("存储：不会保存到任何服务器，仅在转发时临时处理")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PolicyHighlight("重要：唯一会发送短信内容的情况是您主动配置了 Webhook 转发目标（如企业微信、钉钉、飞书或自定义 Webhook），应用会将短信直接发送到您指定的目标，不会经过我们的服务器。")
+                        
+                        PolicySubtitle("配置信息")
+                        Text("您设置的转发通道、关键词规则等配置信息保存在您手机的本地存储中，不会上传。")
+                        
+                        PolicySubtitle("转发日志")
+                        Text("应用会在本地记录转发历史（最多200条），方便您查看和调试，这些日志仅存储在您的手机上。")
+                    }
+                    
+                    PolicySection(title = "权限说明") {
+                        PolicyBullet("接收短信权限：监听设备收到的短信，用于执行转发功能")
+                        PolicyBullet("读取手机状态权限：用于识别双卡手机的 SIM 卡信息和获取本机号码（可选）")
+                        PolicyBullet("通知权限：显示前台服务通知，让您知道服务正在运行")
+                        PolicyBullet("网络权限：仅用于转发到您配置的 Webhook")
+                        PolicyBullet("开机自启权限：让应用在开机后自动启动转发服务（可选）")
+                        PolicyBullet("前台服务权限：保持应用在后台稳定运行")
+                        PolicyBullet("忽略电池优化权限：防止系统杀死后台服务（可选）")
+                        PolicyBullet("访问网络状态权限：检测网络连接状态")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("所有权限都需要您主动授权，您可以随时在系统设置中撤销。")
+                    }
+                    
+                    PolicySection(title = "数据存储") {
+                        PolicySubtitle("本地存储")
+                        Text("所有数据都存储在您手机的私有目录中，包括：")
+                        Spacer(modifier = Modifier.height(4.dp))
+                        PolicyBullet("转发通道和关键词配置")
+                        PolicyBullet("转发历史日志")
+                        PolicyBullet("应用设置")
+                        
+                        PolicySubtitle("服务器存储")
+                        PolicyHighlight("我们没有服务器存储您的数据！应用是纯本地运行的工具，我们不收集、不存储、不上传任何用户数据。")
+                    }
+                    
+                    PolicySection(title = "您的权利") {
+                        PolicyBullet("查看数据：可以在应用内查看所有转发日志")
+                        PolicyBullet("删除数据：可以在应用内清空日志，或卸载应用删除所有数据")
+                        PolicyBullet("控制权限：可以在系统设置中随时授予或撤销权限")
+                        PolicyBullet("撤回同意：可以在应用设置中撤回隐私政策同意")
+                    }
+                    
+                    PolicySection(title = "第三方服务") {
+                        PolicyHighlight("关于转发目标：如果您配置了 Webhook 或其他第三方服务作为转发目标，短信内容会发送到该第三方。请您谨慎选择转发目标，并确保了解其隐私政策。我们不对第三方的数据处理负责。")
+                        
+                        PolicySubtitle("第三方 SDK")
+                        Text("当前版本未集成任何第三方 SDK（包括统计、广告、崩溃分析等）。")
+                    }
+                    
+                    PolicySection(title = "政策更新") {
+                        Text("我们可能会不时更新本隐私政策。重大变更时，我们会通过应用内通知或其他方式告知您。建议您定期查看本政策以了解最新信息。")
+                    }
+                    
+                    PolicySection(title = "联系我们") {
+                        Text("如果您对本隐私政策有任何疑问或建议，请通过以下方式联系我们：")
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("邮箱：support@smsforwarder.cn")
+                    }
+                }
+                
+                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                if (isViewOnly) {
+                    Button(
+                        onClick = onAgree,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("关闭") }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onAgree,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("同意") }
+                        OutlinedButton(
+                            onClick = onDisagree,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("不同意") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PolicyScrollableColumn(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = modifier
+            .verticalScroll(scrollState)
+            .padding(horizontal = 8.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun PolicySection(title: String, content: @Composable () -> Unit) {
+    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        content()
+    }
+}
+
+@Composable
+private fun PolicySubtitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
+    )
+}
+
+@Composable
+private fun PolicyBullet(text: String) {
+    Row(modifier = Modifier.padding(bottom = 4.dp)) {
+        Text(
+            "• ",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PolicyHighlight(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF667EEA).copy(alpha = 0.08f))
+            .padding(12.dp)
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
@@ -1414,7 +1684,7 @@ fun TestRuleDialog(
 }
 
 @Composable
-fun AboutDialog(onDismiss: () -> Unit) {
+fun AboutDialog(onDismiss: () -> Unit, onShowPrivacyPolicy: () -> Unit) {
     val context = LocalContext.current
     val packageManager = context.packageManager
     val packageName = context.packageName
@@ -1483,6 +1753,16 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.clickable {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://smsforwarder.cn/"))
                         context.startActivity(intent)
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "隐私政策",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.clickable {
+                        onShowPrivacyPolicy()
                     }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -2423,6 +2703,7 @@ fun SettingsTab(
     highBatteryThreshold: Int,
     onHighBatteryThresholdChange: (Int) -> Unit,
     onShowTestDialog: () -> Unit,
+    onRevokePrivacyConsent: () -> Unit,
     permissionUpdateTrigger: Int
 ) {
     LazyColumn(
@@ -2751,6 +3032,201 @@ fun SettingsTab(
                     }
                 }
             }
+        }
+
+        // 权限管理
+        item {
+            ModernCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "权限管理",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val ctx = LocalContext.current
+
+                    PermissionManagementItem(
+                        icon = Icons.Outlined.Message,
+                        title = "短信权限",
+                        description = "用于接收并识别短信内容",
+                        granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
+                        onClick = {
+                            try {
+                                val intent = Intent().apply {
+                                    action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                                    data = Uri.fromParts("package", ctx.packageName, null)
+                                }
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PermissionManagementItem(
+                        icon = Icons.Outlined.Notifications,
+                        title = "通知权限",
+                        description = "用于显示服务运行状态和提醒",
+                        granted = NotificationManagerCompat.from(ctx).areNotificationsEnabled(),
+                        onClick = {
+                            try {
+                                val intent = Intent().apply {
+                                    action = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                                    } else {
+                                        "android.settings.APPLICATION_DETAILS_SETTINGS"
+                                    }
+                                    data = Uri.fromParts("package", ctx.packageName, null)
+                                }
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PermissionManagementItem(
+                        icon = Icons.Outlined.Phone,
+                        title = "读取手机状态",
+                        description = "用于识别双卡手机的SIM卡信息（可选）",
+                        granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED,
+                        onClick = {
+                            try {
+                                val intent = Intent().apply {
+                                    action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                                    data = Uri.fromParts("package", ctx.packageName, null)
+                                }
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    PermissionManagementItem(
+                        icon = Icons.Outlined.BatteryFull,
+                        title = "忽略电池优化",
+                        description = "防止系统杀死后台服务（可选）",
+                        granted = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(ctx.packageName),
+                        onClick = {
+                            try {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${ctx.packageName}")
+                                }
+                                ctx.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // 隐私设置
+        item {
+            ModernCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "隐私设置",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedButton(
+                        onClick = onRevokePrivacyConsent,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFEE4444)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFEE4444).copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Outlined.Shield, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("撤销隐私政策同意", fontSize = 16.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionManagementItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    granted: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (granted) Color(0xFF22C55E).copy(alpha = 0.1f)
+                    else Color(0xFFF59E0B).copy(alpha = 0.1f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (granted) Color(0xFF22C55E) else Color(0xFFF59E0B),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (granted) "已开启" else "去设置",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (granted) Color(0xFF22C55E) else MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
