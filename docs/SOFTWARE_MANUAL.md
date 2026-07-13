@@ -8,13 +8,13 @@
 短信转发助手
 
 ### 1.2 软件版本号
-V2.7.8
+V2.7.2
 
 ### 1.3 软件分类
 应用软件 → 工具软件 → 短信工具
 
 ### 1.4 开发完成日期
-2026年4月7日
+2026年4月5日
 
 ### 1.5 著作权人
 华昊科技有限公司
@@ -73,7 +73,7 @@ V2.7.8
    - 网络恢复后自动重试
 
 9. **前台服务常驻**
-   - 提高在厂商定制 ROM（如 HyperOS）上的存活率
+   - 提高在厂商定制 ROM 上的存活率
    - 显示常驻通知
 
 10. **运行日志记录**
@@ -87,12 +87,6 @@ V2.7.8
 12. **开机自启**
     - 设备启动后自动运行
     - 可选配置
-
-13. **电量提醒**
-    - 低电量提醒（可自定义阈值）
-    - 高电量提醒（可自定义阈值）
-    - 通过配置的 Webhook 通道发送
-    - 避免重复频繁提醒
 
 ### 2.2 软件特点
 
@@ -244,7 +238,7 @@ V2.7.8
 
 1. **短信监听**
    - 使用 BroadcastReceiver 监听短信广播
-   - 高优先级（999）确保优先接收
+   - 高优先级确保优先接收
 
 2. **双卡识别**
    - 使用 SubscriptionManager 获取 SIM 卡信息
@@ -317,15 +311,10 @@ V2.7.8
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
-| V2.7.8 | 2026-04-08 | 电量提醒消息添加 SIM 卡手机号标识，便于区分设备；修复飞书消息格式问题；低电量和高电量提醒可独立配置开关和阈值 |
-| V2.7.7 | 2026-04-07 | 新增电量提醒功能（低电量/高电量提醒，通过 Webhook 发送）；修复 SIM 卡设置页面电话权限状态不实时更新问题；添加电话权限友好提示；添加开机自启动友好提示；更新隐私政策；优化 APK 大小；增强代码健壮性 |
-| V2.7.6 | 2026-04-06 | 修复首页权限状态实时更新问题；关于页面自动获取版本号；添加官方网址和备案号；删除版权信息中的版本号 |
-| V2.7.5 | 2026-04-05 | 更新签名证书，准备 APP 备案 |
 | V2.7.2 | 2026-04-05 | 优化更新对话框和关于对话框按钮样式，统一按钮大小和位置；修复双卡设备 SIM 卡识别 bug |
 | V2.6.4 | 2026-04-05 | 修复双卡设备 SIM 卡识别 bug，SIM2 收到的短信现在会正确显示 SIM2 的本机号码；优化 subscriptionId 获取方式，提高兼容性 |
 | V2.6.1 | 2026-04-05 | 更新关于对话框，添加版权信息和软件说明；调整菜单布局，避免功能重复 |
 | V2.6.0 | 2026-04-05 | 降低最低支持版本到 Android 5.0 (API 21)，支持更多设备 |
-| ... | ... | ... |
 
 ---
 
@@ -379,6 +368,28 @@ V2.7.8
 - 《信息安全技术 个人信息安全规范》（GB/T 35273）
 - 《移动智能终端应用软件预置和分发管理暂行规定》
 
+### 12.3 软件运行截图
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130631-047.png" alt="MuMu-20260406-130631-047" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130645-547.png" alt="MuMu-20260406-130645-547" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130651-764.png" alt="MuMu-20260406-130651-764" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130655-250.png" alt="MuMu-20260406-130655-250" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130702-734.png" alt="MuMu-20260406-130702-734" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130731-622.png" alt="MuMu-20260406-130731-622" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130735-447.png" alt="MuMu-20260406-130735-447" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130738-930.png" alt="MuMu-20260406-130738-930" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130745-024.png" alt="MuMu-20260406-130745-024" style="zoom:50%;" />
+
+<img src="C:\Users\lanbing\Documents\GitHub\sms-forwarder\docs\软件运行截图\MuMu-20260406-130749-632.png" alt="MuMu-20260406-130749-632" style="zoom:50%;" />
+
 ---
 
 **本说明书如有未尽事宜，可随时补充修订。**
@@ -389,6 +400,6 @@ V2.7.8
 
 ---
 
-**编制日期**：2026年4月7日
+**编制日期**：2026年4月5日
 
 **编制人**：王士辉

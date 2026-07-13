@@ -27,8 +27,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -78,24 +76,10 @@ import java.util.*
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var requestSmsPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var requestNotifPermissionLauncher: ActivityResultLauncher<String>
     private var onPermissionChanged: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        requestSmsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) Toast.makeText(this, "短信权限已授权", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(this, "请授予短信权限以接收短信", Toast.LENGTH_LONG).show()
-            onPermissionChanged?.invoke()
-        }
-
-        requestNotifPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) Toast.makeText(this, "通知权限已授权", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(this, "请允许通知权限以显示常驻通知", Toast.LENGTH_LONG).show()
-            onPermissionChanged?.invoke()
-        }
 
         setContent {
             val isDarkTheme = isSystemInDarkTheme()
@@ -125,10 +109,26 @@ class MainActivity : ComponentActivity() {
 
                 SmsForwarderApp(
                     permissionUpdateTrigger = permissionUpdateTrigger,
-                    onRequestSmsPermission = { requestSmsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS) },
+                    onRequestSmsPermission = {
+                        try {
+                            val intent = Intent().apply {
+                                action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                                data = Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                        } catch (_: Exception) {
+                            Toast.makeText(this, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onRequestNotificationPermission = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        try {
+                            val intent = Intent().apply {
+                                action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                                data = Uri.fromParts("package", packageName, null)
+                            }
+                            startActivity(intent)
+                        } catch (_: Exception) {
+                            Toast.makeText(this, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onStartService = { startServiceWithNotificationCheck() },
@@ -234,6 +234,7 @@ fun SmsForwarderApp(
     var showTestDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBootTipDialog by remember { mutableStateOf(false) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
     
     // 定义5个标签页
     val tabs = listOf(
@@ -372,22 +373,31 @@ fun SmsForwarderApp(
                     0 -> HomeTab(
                         isEnabled = isEnabled,
                         onEnabledChange = { checked ->
-                            isEnabled = checked
-                            prefs.edit().putBoolean(Constants.PREF_ENABLED, isEnabled).apply()
                             if (checked) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    val hasNotif = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-                                    if (!hasNotif) onRequestNotificationPermission()
+                                val hasNotif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                                } else {
+                                    true
                                 }
                                 val hasSms = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
-                                if (!hasSms) onRequestSmsPermission()
+                                
+                                if (!hasNotif || !hasSms) {
+                                    showPermissionDialog = true
+                                    return@HomeTab
+                                }
+                                
+                                isEnabled = true
+                                prefs.edit().putBoolean(Constants.PREF_ENABLED, isEnabled).apply()
                                 onStartService()
                                 LogStore.append(context, "服务已启动（由用户开启）")
+                                context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                             } else {
+                                isEnabled = false
+                                prefs.edit().putBoolean(Constants.PREF_ENABLED, isEnabled).apply()
                                 onStopService()
                                 LogStore.append(context, "服务已停止（由用户关闭）")
+                                context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                             }
-                            context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                         },
                         startOnBoot = startOnBoot,
                         onStartOnBootChange = {
@@ -748,6 +758,83 @@ fun SmsForwarderApp(
             }
         )
     }
+    
+    // 权限说明对话框
+    if (showPermissionDialog) {
+        val ctx = LocalContext.current
+        PermissionExplanationDialog(
+            onDismiss = { showPermissionDialog = false },
+            onGoToSettings = {
+                showPermissionDialog = false
+                try {
+                    val intent = Intent().apply {
+                        action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                        data = Uri.fromParts("package", ctx.packageName, null)
+                    }
+                    ctx.startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun PermissionExplanationDialog(
+    onDismiss: () -> Unit,
+    onGoToSettings: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF667EEA).copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Security,
+                        contentDescription = null,
+                        tint = Color(0xFF667EEA),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    "需要权限",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "短信转发助手需要以下权限才能正常工作：\n\n• 短信权限：用于接收并识别短信内容\n• 通知权限：用于显示服务运行状态和提醒\n\n请在系统设置中开启这些权限。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("稍后") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onGoToSettings,
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("去设置") }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -949,12 +1036,13 @@ fun PermissionItem(
                 tint = Color(0xFF10B981)
             )
         } else {
-            Button(
+            TextButton(
                 onClick = onClick,
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text("去开启")
+                Text("去设置")
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
             }
         }
     }
