@@ -16,8 +16,8 @@ android {
         val versionNameFromProp = (project.findProperty("VERSION_NAME") ?: System.getenv("VERSION_NAME"))?.toString()
         val versionCodeFromProp = (project.findProperty("VERSION_CODE") ?: System.getenv("VERSION_CODE"))?.toString()
 
-        versionName = versionNameFromProp ?: "2.7.10"
-        versionCode = (versionCodeFromProp?.toIntOrNull() ?: 30)
+        versionName = versionNameFromProp ?: "2.7.11"
+        versionCode = (versionCodeFromProp?.toIntOrNull() ?: 31)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -98,6 +98,14 @@ tasks.register("printVersion") {
         println("versionName = ${android.defaultConfig.versionName}")
         println("versionCode = ${android.defaultConfig.versionCode}")
     }
+}
+
+configurations.all {
+    exclude(group = "com.infinitus", module = "inview")
+    exclude(group = "com.inview", module = "*")
+    exclude(group = "*", module = "inview")
+    exclude(group = "*", module = "*inview*")
+    exclude(group = "*inview*", module = "*")
 }
 
 dependencies {
