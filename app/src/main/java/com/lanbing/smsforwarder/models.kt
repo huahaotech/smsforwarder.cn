@@ -27,3 +27,21 @@ data class KeywordConfig(
     val keyword: String, // empty string means match-all
     val channelId: String
 )
+
+data class AppConfig(
+    val version: String,
+    val exportTime: String,
+    val channels: List<Channel>,
+    val keywordConfigs: List<KeywordConfig>,
+    val showReceiverPhone: Boolean,
+    val showSenderPhone: Boolean,
+    val highlightVerificationCode: Boolean,
+    val batteryReminderEnabled: Boolean,
+    val lowBatteryReminderEnabled: Boolean,
+    val highBatteryReminderEnabled: Boolean,
+    val lowBatteryThreshold: Int,
+    val highBatteryThreshold: Int,
+    val customSim1Phone: String?,
+    val customSim2Phone: String?,
+    val startOnBoot: Boolean
+)

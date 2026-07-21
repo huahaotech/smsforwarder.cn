@@ -27,6 +27,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -81,14 +82,26 @@ import java.util.*
 class MainActivity : ComponentActivity() {
 
     private var onPermissionChanged: (() -> Unit)? = null
+    private var onConfigChanged: (() -> Unit)? = null
+    private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        configImportLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let {
+                importConfig(this, it) {
+                    onPermissionChanged?.invoke()
+                    onConfigChanged?.invoke()
+                }
+            }
+        }
 
         setContent {
             val isDarkTheme = isSystemInDarkTheme()
             val colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
             var permissionUpdateTrigger by remember { mutableStateOf(0) }
+            var configUpdateTrigger by remember { mutableStateOf(0) }
 
             MaterialTheme(
                 colorScheme = colorScheme,
@@ -109,10 +122,12 @@ class MainActivity : ComponentActivity() {
 
                 SideEffect {
                     onPermissionChanged = { permissionUpdateTrigger++ }
+                    onConfigChanged = { configUpdateTrigger++ }
                 }
 
                 SmsForwarderApp(
                     permissionUpdateTrigger = permissionUpdateTrigger,
+                    configUpdateTrigger = configUpdateTrigger,
                     onRequestSmsPermission = {
                         try {
                             val intent = Intent().apply {
@@ -136,7 +151,13 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onStartService = { startServiceWithNotificationCheck() },
-                    onStopService = { onStopService() }
+                    onStopService = { onStopService() },
+                    onExportConfig = { channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot ->
+                        exportConfig(this, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                    },
+                    onImportConfig = {
+                        configImportLauncher.launch("application/json")
+                    }
                 )
             }
         }
@@ -187,27 +208,46 @@ fun isValidWebhookUrl(url: String): Boolean {
 @Composable
 fun SmsForwarderApp(
     permissionUpdateTrigger: Int,
+    configUpdateTrigger: Int,
     onRequestSmsPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onStartService: () -> Unit,
-    onStopService: () -> Unit
+    onStopService: () -> Unit,
+    onExportConfig: (
+        channels: List<Channel>,
+        configs: List<KeywordConfig>,
+        showReceiverPhone: Boolean,
+        showSenderPhone: Boolean,
+        highlightVerificationCode: Boolean,
+        batteryReminderEnabled: Boolean,
+        lowBatteryReminderEnabled: Boolean,
+        highBatteryReminderEnabled: Boolean,
+        lowBatteryThreshold: Int,
+        highBatteryThreshold: Int,
+        customSim1Phone: String?,
+        customSim2Phone: String?,
+        startOnBoot: Boolean
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    onImportConfig: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
 
-    var isEnabled by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_ENABLED, false)) }
-    var startOnBoot by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_START_ON_BOOT, false)) }
-    var showReceiverPhone by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, true)) }
-    var showSenderPhone by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)) }
-    var highlightVerificationCode by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)) }
-    var batteryReminderEnabled by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
-    var lowBatteryReminderEnabled by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)) }
-    var highBatteryReminderEnabled by remember { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)) }
-    var lowBatteryThreshold by remember { mutableStateOf(prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)) }
-    var highBatteryThreshold by remember { mutableStateOf(prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)) }
+    var isEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_ENABLED, false)) }
+    var startOnBoot by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_START_ON_BOOT, false)) }
+    var showReceiverPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, true)) }
+    var showSenderPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)) }
+    var highlightVerificationCode by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)) }
+    var batteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
+    var lowBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)) }
+    var highBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)) }
+    var lowBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)) }
+    var highBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)) }
+    var customSim1Phone by remember(configUpdateTrigger) { mutableStateOf(prefs.getString(Constants.PREF_CUSTOM_SIM1_PHONE, null)) }
+    var customSim2Phone by remember(configUpdateTrigger) { mutableStateOf(prefs.getString(Constants.PREF_CUSTOM_SIM2_PHONE, null)) }
 
-    var channels by remember { mutableStateOf(loadChannels(prefs)) }
-    var configs by remember { mutableStateOf(loadConfigs(prefs)) }
+    var channels by remember(configUpdateTrigger) { mutableStateOf(loadChannels(prefs)) }
+    var configs by remember(configUpdateTrigger) { mutableStateOf(loadConfigs(prefs)) }
 
     // Channel form state
     var newChannelName by remember { mutableStateOf("") }
@@ -568,7 +608,12 @@ fun SmsForwarderApp(
                             (context as Activity).finish()
                         },
                         onShowPrivacyPolicy = { showPrivacyDialog = true },
-                        permissionUpdateTrigger = permissionUpdateTrigger
+                        permissionUpdateTrigger = permissionUpdateTrigger,
+                        startOnBoot = startOnBoot,
+                        onExportConfig = {
+                            onExportConfig(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                        },
+                        onImportConfig = onImportConfig
                     )
                     4 -> LogTab(
                         logs = logs,
@@ -2785,7 +2830,10 @@ fun SettingsTab(
     onShowTestDialog: () -> Unit,
     onRevokePrivacyConsent: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
-    permissionUpdateTrigger: Int
+    permissionUpdateTrigger: Int,
+    startOnBoot: Boolean,
+    onExportConfig: () -> Unit,
+    onImportConfig: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -3102,6 +3150,32 @@ fun SettingsTab(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
+                        onClick = onExportConfig,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        Icon(Icons.Outlined.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("导出配置", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onImportConfig,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        Icon(Icons.Outlined.FilePresent, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("导入配置", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
                         onClick = onShowTestDialog,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -3383,4 +3457,183 @@ private fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<
         arr.put(o)
     }
     prefs.edit().putString(Constants.PREF_KEYWORD_CONFIGS, arr.toString()).apply()
+}
+
+private fun exportConfig(
+    context: Context,
+    channels: List<Channel>,
+    configs: List<KeywordConfig>,
+    showReceiverPhone: Boolean,
+    showSenderPhone: Boolean,
+    highlightVerificationCode: Boolean,
+    batteryReminderEnabled: Boolean,
+    lowBatteryReminderEnabled: Boolean,
+    highBatteryReminderEnabled: Boolean,
+    lowBatteryThreshold: Int,
+    highBatteryThreshold: Int,
+    customSim1Phone: String?,
+    customSim2Phone: String?,
+    startOnBoot: Boolean
+) {
+    val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+    val versionName = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    } catch (_: Exception) {
+        "unknown"
+    }
+    
+    val appConfig = AppConfig(
+        version = versionName,
+        exportTime = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()),
+        channels = channels,
+        keywordConfigs = configs,
+        showReceiverPhone = showReceiverPhone,
+        showSenderPhone = showSenderPhone,
+        highlightVerificationCode = highlightVerificationCode,
+        batteryReminderEnabled = batteryReminderEnabled,
+        lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+        highBatteryReminderEnabled = highBatteryReminderEnabled,
+        lowBatteryThreshold = lowBatteryThreshold,
+        highBatteryThreshold = highBatteryThreshold,
+        customSim1Phone = customSim1Phone,
+        customSim2Phone = customSim2Phone,
+        startOnBoot = startOnBoot
+    )
+    
+    try {
+        val jsonStr = JSONObject().apply {
+            put("version", appConfig.version)
+            put("exportTime", appConfig.exportTime)
+            
+            val channelsArr = JSONArray()
+            appConfig.channels.forEach { ch ->
+                channelsArr.put(JSONObject().apply {
+                    put("id", ch.id)
+                    put("name", ch.name)
+                    put("type", ch.type.name)
+                    put("target", ch.target)
+                })
+            }
+            put("channels", channelsArr)
+            
+            val configsArr = JSONArray()
+            appConfig.keywordConfigs.forEach { cfg ->
+                configsArr.put(JSONObject().apply {
+                    put("id", cfg.id)
+                    put("keyword", cfg.keyword)
+                    put("channelId", cfg.channelId)
+                })
+            }
+            put("keywordConfigs", configsArr)
+            
+            put("showReceiverPhone", appConfig.showReceiverPhone)
+            put("showSenderPhone", appConfig.showSenderPhone)
+            put("highlightVerificationCode", appConfig.highlightVerificationCode)
+            put("batteryReminderEnabled", appConfig.batteryReminderEnabled)
+            put("lowBatteryReminderEnabled", appConfig.lowBatteryReminderEnabled)
+            put("highBatteryReminderEnabled", appConfig.highBatteryReminderEnabled)
+            put("lowBatteryThreshold", appConfig.lowBatteryThreshold)
+            put("highBatteryThreshold", appConfig.highBatteryThreshold)
+            put("customSim1Phone", appConfig.customSim1Phone ?: JSONObject.NULL)
+            put("customSim2Phone", appConfig.customSim2Phone ?: JSONObject.NULL)
+            put("startOnBoot", appConfig.startOnBoot)
+        }.toString(4)
+        
+        val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+            ?: context.filesDir
+        val fileName = "sms_forwarder_config_${System.currentTimeMillis()}.json"
+        val file = java.io.File(downloadsDir, fileName)
+        file.writeText(jsonStr, Charsets.UTF_8)
+        
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
+            putExtra(Intent.EXTRA_SUBJECT, "短信转发助手配置")
+            putExtra(Intent.EXTRA_TEXT, "这是我的短信转发助手配置文件")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        
+        val chooser = Intent.createChooser(shareIntent, "分享配置文件")
+        context.startActivity(chooser)
+        
+        Toast.makeText(context, "配置已导出并准备分享", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun importConfig(
+    context: Context,
+    fileUri: Uri,
+    onImportSuccess: () -> Unit
+) {
+    try {
+        val inputStream = context.contentResolver.openInputStream(fileUri)
+            ?: throw Exception("无法打开文件")
+        val jsonStr = inputStream.bufferedReader().use { it.readText() }
+        inputStream.close()
+        
+        val json = JSONObject(jsonStr)
+        
+        val channels = mutableListOf<Channel>()
+        val channelsArr = json.optJSONArray("channels") ?: JSONArray()
+        for (i in 0 until channelsArr.length()) {
+            val chObj = channelsArr.getJSONObject(i)
+            val typeStr = chObj.optString("type", "WECHAT")
+            val type = try { ChannelType.valueOf(typeStr) } catch (_: Throwable) { ChannelType.WECHAT }
+            channels.add(Channel(
+                id = chObj.getString("id"),
+                name = chObj.getString("name"),
+                type = type,
+                target = chObj.getString("target")
+            ))
+        }
+        
+        val configs = mutableListOf<KeywordConfig>()
+        val configsArr = json.optJSONArray("keywordConfigs") ?: JSONArray()
+        for (i in 0 until configsArr.length()) {
+            val cfgObj = configsArr.getJSONObject(i)
+            configs.add(KeywordConfig(
+                id = cfgObj.getString("id"),
+                keyword = cfgObj.getString("keyword"),
+                channelId = cfgObj.getString("channelId")
+            ))
+        }
+        
+        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        
+        saveChannels(prefs, channels)
+        saveConfigs(prefs, configs)
+        
+        editor.putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, json.optBoolean("showReceiverPhone", true))
+        editor.putBoolean(Constants.PREF_SHOW_SENDER_PHONE, json.optBoolean("showSenderPhone", true))
+        editor.putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, json.optBoolean("highlightVerificationCode", true))
+        editor.putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, json.optBoolean("batteryReminderEnabled", false))
+        editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
+        editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
+        editor.putInt(Constants.PREF_LOW_BATTERY_THRESHOLD, json.optInt("lowBatteryThreshold", Constants.DEFAULT_LOW_BATTERY_THRESHOLD))
+        editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
+        editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
+        
+        val sim1 = json.optString("customSim1Phone", null)
+        val sim2 = json.optString("customSim2Phone", null)
+        if (sim1.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
+        } else {
+            editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1)
+        }
+        if (sim2.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
+        } else {
+            editor.putString(Constants.PREF_CUSTOM_SIM2_PHONE, sim2)
+        }
+        
+        editor.apply()
+        
+        Toast.makeText(context, "配置导入成功", Toast.LENGTH_SHORT).show()
+        onImportSuccess()
+    } catch (e: Exception) {
+        Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
 }
