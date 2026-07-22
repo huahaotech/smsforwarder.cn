@@ -4,8 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
-import android.graphics.ImageFormat
-import android.graphics.YuvImage
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -44,7 +42,6 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -116,6 +113,7 @@ class ScanActivity : ComponentActivity() {
                 }
 
             val imageAnalyzer = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
                     it.setAnalyzer(cameraExecutor, ZxingQrAnalyzer { barcode ->
@@ -297,20 +295,19 @@ class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAn
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
             try {
-                // 将 YUV 图像转换为 Bitmap 所需的格式
+                // 获取 Y 平面数据
+                val yPlane = mediaImage.planes[0]
                 val width = mediaImage.width
                 val height = mediaImage.height
-                val yuvBytes = ByteArray(mediaImage.planes[0].buffer.capacity() +
-                    mediaImage.planes[1].buffer.capacity() +
-                    mediaImage.planes[2].buffer.capacity())
                 
-                mediaImage.planes[0].buffer.get(yuvBytes, 0, mediaImage.planes[0].buffer.capacity())
-                mediaImage.planes[1].buffer.get(yuvBytes, mediaImage.planes[0].buffer.capacity(), mediaImage.planes[1].buffer.capacity())
-                mediaImage.planes[2].buffer.get(yuvBytes, mediaImage.planes[0].buffer.capacity() + mediaImage.planes[1].buffer.capacity(), mediaImage.planes[2].buffer.capacity())
-
-                // 使用 PlanarYUVLuminanceSource 直接处理 YUV 数据
+                // 复制 Y 平面数据到字节数组
+                val yBuffer = yPlane.buffer
+                val yData = ByteArray(yBuffer.remaining())
+                yBuffer.get(yData)
+                
+                // 使用 PlanarYUVLuminanceSource 创建 BinaryBitmap（只使用 Y 通道）
                 val source = PlanarYUVLuminanceSource(
-                    yuvBytes,
+                    yData,
                     width,
                     height,
                     0,
@@ -319,7 +316,7 @@ class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAn
                     height,
                     false
                 )
-
+                
                 val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
                 val result = reader.decode(binaryBitmap)
                 
