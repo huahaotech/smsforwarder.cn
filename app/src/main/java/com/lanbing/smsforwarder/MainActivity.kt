@@ -16,6 +16,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -86,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private var onPermissionChanged: (() -> Unit)? = null
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private lateinit var qrCodeScanLauncher: androidx.activity.result.ActivityResultLauncher<com.journeyapps.barcodescanner.ScanOptions>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +96,15 @@ class MainActivity : ComponentActivity() {
         configImportLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let {
                 importConfig(this, it) {
+                    onPermissionChanged?.invoke()
+                    onConfigChanged?.invoke()
+                }
+            }
+        }
+
+        qrCodeScanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
+            if (result.contents != null) {
+                importConfigFromJson(result.contents) {
                     onPermissionChanged?.invoke()
                     onConfigChanged?.invoke()
                 }
@@ -154,11 +166,22 @@ class MainActivity : ComponentActivity() {
                     },
                     onStartService = { startServiceWithNotificationCheck() },
                     onStopService = { onStopService() },
-                    onExportConfig = { channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot ->
-                        exportConfig(this, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                    onExportConfig = { channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot ->
+                        exportConfig(this, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
                     },
                     onImportConfig = {
-                        configImportLauncher.launch("application/json")
+                        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 1001)
+                        } else {
+                            val scanOptions = com.journeyapps.barcodescanner.ScanOptions().apply {
+                                setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                                setPrompt("扫描配置二维码")
+                                setCameraId(0)
+                                setBeepEnabled(false)
+                                setBarcodeImageEnabled(false)
+                            }
+                            qrCodeScanLauncher.launch(scanOptions)
+                        }
                     }
                 )
             }
@@ -174,6 +197,28 @@ class MainActivity : ComponentActivity() {
     private fun onStopService() {
         val svc = Intent(this, SmsForegroundService::class.java)
         stopService(svc)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1001) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                val scanOptions = com.journeyapps.barcodescanner.ScanOptions().apply {
+                    setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                    setPrompt("扫描配置二维码")
+                    setCameraId(0)
+                    setBeepEnabled(false)
+                    setBarcodeImageEnabled(false)
+                }
+                qrCodeScanLauncher.launch(scanOptions)
+            } else {
+                Toast.makeText(this, "请授予相机权限以扫描二维码", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun startServiceWithNotificationCheck() {
@@ -224,12 +269,14 @@ fun SmsForwarderApp(
         batteryReminderEnabled: Boolean,
         lowBatteryReminderEnabled: Boolean,
         highBatteryReminderEnabled: Boolean,
+        chargingReminderEnabled: Boolean,
+        batteryReminderChannelId: String?,
         lowBatteryThreshold: Int,
         highBatteryThreshold: Int,
         customSim1Phone: String?,
         customSim2Phone: String?,
         startOnBoot: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -&gt; },
     onImportConfig: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -243,6 +290,8 @@ fun SmsForwarderApp(
     var batteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
     var lowBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)) }
     var highBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)) }
+    var chargingReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, true)) }
+    var batteryReminderChannelId by remember(configUpdateTrigger) { mutableStateOf(prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, null)) }
     var lowBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)) }
     var highBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)) }
     var customSim1Phone by remember(configUpdateTrigger) { mutableStateOf(prefs.getString(Constants.PREF_CUSTOM_SIM1_PHONE, null)) }
@@ -250,6 +299,13 @@ fun SmsForwarderApp(
 
     var channels by remember(configUpdateTrigger) { mutableStateOf(loadChannels(prefs)) }
     var configs by remember(configUpdateTrigger) { mutableStateOf(loadConfigs(prefs)) }
+
+    // Battery reminder channel selection dialog
+    var showChannelSelectionDialog by remember { mutableStateOf(false) }
+
+    // QR Code dialog
+    var showQrCodeDialog by remember { mutableStateOf(false) }
+    var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     // Channel form state
     var newChannelName by remember { mutableStateOf("") }
@@ -609,6 +665,18 @@ fun SmsForwarderApp(
                             prefs.edit().putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, highBatteryReminderEnabled).apply()
                             if (highBatteryReminderEnabled) LogStore.append(context, "已开启高电量提醒") else LogStore.append(context, "已关闭高电量提醒")
                         },
+                        chargingReminderEnabled = chargingReminderEnabled,
+                        onChargingReminderEnabledChange = {
+                            chargingReminderEnabled = it
+                            prefs.edit().putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, chargingReminderEnabled).apply()
+                            if (chargingReminderEnabled) LogStore.append(context, "已开启充电提醒") else LogStore.append(context, "已关闭充电提醒")
+                        },
+                        batteryReminderChannelId = batteryReminderChannelId,
+                        onBatteryReminderChannelIdChange = {
+                            batteryReminderChannelId = it
+                            prefs.edit().putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, batteryReminderChannelId).apply()
+                        },
+                        channels = channels,
                         lowBatteryThreshold = lowBatteryThreshold,
                         onLowBatteryThresholdChange = {
                             lowBatteryThreshold = it
@@ -628,7 +696,9 @@ fun SmsForwarderApp(
                         permissionUpdateTrigger = permissionUpdateTrigger,
                         startOnBoot = startOnBoot,
                         onExportConfig = {
-                            onExportConfig(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                            val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                            qrCodeBitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
+                            showQrCodeDialog = true
                         },
                         onImportConfig = onImportConfig
                     )
@@ -875,6 +945,67 @@ fun SmsForwarderApp(
             },
             isViewOnly = !isPrivacyRequired
         )
+    }
+
+    // 二维码导出弹窗
+    if (showQrCodeDialog) {
+        Dialog(onDismissRequest = { showQrCodeDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(8.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "配置二维码",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "截图保存二维码，在另一台设备扫码即可导入配置",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .background(Color.White)
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (qrCodeBitmap != null) {
+                            Image(
+                                bitmap = qrCodeBitmap.asImageBitmap(),
+                                contentDescription = "配置二维码",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = { showQrCodeDialog = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        Text("关闭", fontSize = 16.sp)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2892,6 +3023,11 @@ fun SettingsTab(
     onLowBatteryReminderEnabledChange: (Boolean) -> Unit,
     highBatteryReminderEnabled: Boolean,
     onHighBatteryReminderEnabledChange: (Boolean) -> Unit,
+    chargingReminderEnabled: Boolean,
+    onChargingReminderEnabledChange: (Boolean) -> Unit,
+    batteryReminderChannelId: String?,
+    onBatteryReminderChannelIdChange: (String?) -> Unit,
+    channels: List<Channel>,
     lowBatteryThreshold: Int,
     onLowBatteryThresholdChange: (Int) -> Unit,
     highBatteryThreshold: Int,
@@ -2904,6 +3040,8 @@ fun SettingsTab(
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit
 ) {
+    var showChannelSelectionDialog by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -3092,6 +3230,96 @@ fun SettingsTab(
                             }
                         }
                     }
+
+                    // 充电提醒开关
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Filled.Power,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "充电提醒",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "设备开始或结束充电时发送提醒",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = chargingReminderEnabled,
+                            onCheckedChange = onChargingReminderEnabledChange
+                        )
+                    }
+
+                    // 电池提醒通道选择
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "提醒通道",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "选择发送电量提醒的通道，不选择则发送到所有通道",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    showChannelSelectionDialog = true
+                                }
+                                .padding(16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Send,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (batteryReminderChannelId.isNullOrEmpty()) {
+                                        "所有通道"
+                                    } else {
+                                        channels.find { it.id == batteryReminderChannelId }?.name ?: "未知通道"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(
+                                    Icons.Filled.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -3224,7 +3452,7 @@ fun SettingsTab(
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
                     ) {
-                        Icon(Icons.Outlined.Share, contentDescription = null)
+                        Icon(Icons.Filled.QrCode, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("导出配置", fontSize = 16.sp)
                     }
@@ -3237,9 +3465,9 @@ fun SettingsTab(
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
                     ) {
-                        Icon(Icons.Outlined.FilePresent, contentDescription = null)
+                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("导入配置", fontSize = 16.sp)
+                        Text("扫码导入", fontSize = 16.sp)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -3424,6 +3652,85 @@ fun SettingsTab(
             }
         }
     }
+
+    // 通道选择弹窗
+    if (showChannelSelectionDialog) {
+        AlertDialog(
+            onDismissRequest = { showChannelSelectionDialog = false },
+            title = { Text("选择提醒通道") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "选择发送电量提醒的通道，选择\"所有通道\"则发送到全部已配置通道",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    LazyColumn(modifier = Modifier.height(200.dp)) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onBatteryReminderChannelIdChange(null)
+                                        showChannelSelectionDialog = false
+                                    }
+                                    .padding(vertical = 12.dp)
+                            ) {
+                                RadioButton(
+                                    selected = batteryReminderChannelId.isNullOrEmpty(),
+                                    onClick = {
+                                        onBatteryReminderChannelIdChange(null)
+                                        showChannelSelectionDialog = false
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("所有通道")
+                            }
+                        }
+                        channels.forEach { channel ->
+                            item {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onBatteryReminderChannelIdChange(channel.id)
+                                            showChannelSelectionDialog = false
+                                        }
+                                        .padding(vertical = 12.dp)
+                                ) {
+                                    RadioButton(
+                                        selected = batteryReminderChannelId == channel.id,
+                                        onClick = {
+                                            onBatteryReminderChannelIdChange(channel.id)
+                                            showChannelSelectionDialog = false
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(channel.name)
+                                        Text(
+                                            channel.type.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showChannelSelectionDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -3549,6 +3856,64 @@ private fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<
     prefs.edit().putString(Constants.PREF_KEYWORD_CONFIGS, arr.toString()).apply()
 }
 
+private fun generateConfigJson(
+    channels: List<Channel>,
+    configs: List<KeywordConfig>,
+    showReceiverPhone: Boolean,
+    showSenderPhone: Boolean,
+    highlightVerificationCode: Boolean,
+    batteryReminderEnabled: Boolean,
+    lowBatteryReminderEnabled: Boolean,
+    highBatteryReminderEnabled: Boolean,
+    chargingReminderEnabled: Boolean,
+    batteryReminderChannelId: String?,
+    lowBatteryThreshold: Int,
+    highBatteryThreshold: Int,
+    customSim1Phone: String?,
+    customSim2Phone: String?,
+    startOnBoot: Boolean
+): String {
+    return JSONObject().apply {
+        put("version", "2.7.11")
+        put("exportTime", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()))
+        
+        val channelsArr = JSONArray()
+        channels.forEach { ch ->
+            channelsArr.put(JSONObject().apply {
+                put("id", ch.id)
+                put("name", ch.name)
+                put("type", ch.type.name)
+                put("target", ch.target)
+            })
+        }
+        put("channels", channelsArr)
+        
+        val configsArr = JSONArray()
+        configs.forEach { cfg ->
+            configsArr.put(JSONObject().apply {
+                put("id", cfg.id)
+                put("keyword", cfg.keyword)
+                put("channelId", cfg.channelId)
+            })
+        }
+        put("keywordConfigs", configsArr)
+        
+        put("showReceiverPhone", showReceiverPhone)
+        put("showSenderPhone", showSenderPhone)
+        put("highlightVerificationCode", highlightVerificationCode)
+        put("batteryReminderEnabled", batteryReminderEnabled)
+        put("lowBatteryReminderEnabled", lowBatteryReminderEnabled)
+        put("highBatteryReminderEnabled", highBatteryReminderEnabled)
+        put("chargingReminderEnabled", chargingReminderEnabled)
+        put("batteryReminderChannelId", batteryReminderChannelId ?: JSONObject.NULL)
+        put("lowBatteryThreshold", lowBatteryThreshold)
+        put("highBatteryThreshold", highBatteryThreshold)
+        put("customSim1Phone", customSim1Phone ?: JSONObject.NULL)
+        put("customSim2Phone", customSim2Phone ?: JSONObject.NULL)
+        put("startOnBoot", startOnBoot)
+    }.toString()
+}
+
 private fun exportConfig(
     context: Context,
     channels: List<Channel>,
@@ -3559,75 +3924,17 @@ private fun exportConfig(
     batteryReminderEnabled: Boolean,
     lowBatteryReminderEnabled: Boolean,
     highBatteryReminderEnabled: Boolean,
+    chargingReminderEnabled: Boolean,
+    batteryReminderChannelId: String?,
     lowBatteryThreshold: Int,
     highBatteryThreshold: Int,
     customSim1Phone: String?,
     customSim2Phone: String?,
     startOnBoot: Boolean
 ) {
-    val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-    val versionName = try {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName
-    } catch (_: Exception) {
-        "unknown"
-    }
-    
-    val appConfig = AppConfig(
-        version = versionName,
-        exportTime = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()),
-        channels = channels,
-        keywordConfigs = configs,
-        showReceiverPhone = showReceiverPhone,
-        showSenderPhone = showSenderPhone,
-        highlightVerificationCode = highlightVerificationCode,
-        batteryReminderEnabled = batteryReminderEnabled,
-        lowBatteryReminderEnabled = lowBatteryReminderEnabled,
-        highBatteryReminderEnabled = highBatteryReminderEnabled,
-        lowBatteryThreshold = lowBatteryThreshold,
-        highBatteryThreshold = highBatteryThreshold,
-        customSim1Phone = customSim1Phone,
-        customSim2Phone = customSim2Phone,
-        startOnBoot = startOnBoot
-    )
+    val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
     
     try {
-        val jsonStr = JSONObject().apply {
-            put("version", appConfig.version)
-            put("exportTime", appConfig.exportTime)
-            
-            val channelsArr = JSONArray()
-            appConfig.channels.forEach { ch ->
-                channelsArr.put(JSONObject().apply {
-                    put("id", ch.id)
-                    put("name", ch.name)
-                    put("type", ch.type.name)
-                    put("target", ch.target)
-                })
-            }
-            put("channels", channelsArr)
-            
-            val configsArr = JSONArray()
-            appConfig.keywordConfigs.forEach { cfg ->
-                configsArr.put(JSONObject().apply {
-                    put("id", cfg.id)
-                    put("keyword", cfg.keyword)
-                    put("channelId", cfg.channelId)
-                })
-            }
-            put("keywordConfigs", configsArr)
-            
-            put("showReceiverPhone", appConfig.showReceiverPhone)
-            put("showSenderPhone", appConfig.showSenderPhone)
-            put("highlightVerificationCode", appConfig.highlightVerificationCode)
-            put("batteryReminderEnabled", appConfig.batteryReminderEnabled)
-            put("lowBatteryReminderEnabled", appConfig.lowBatteryReminderEnabled)
-            put("highBatteryReminderEnabled", appConfig.highBatteryReminderEnabled)
-            put("lowBatteryThreshold", appConfig.lowBatteryThreshold)
-            put("highBatteryThreshold", appConfig.highBatteryThreshold)
-            put("customSim1Phone", appConfig.customSim1Phone ?: JSONObject.NULL)
-            put("customSim2Phone", appConfig.customSim2Phone ?: JSONObject.NULL)
-            put("startOnBoot", appConfig.startOnBoot)
-        }.toString(4)
         
         val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
             ?: context.filesDir
@@ -3655,6 +3962,87 @@ private fun exportConfig(
         Toast.makeText(context, "配置已导出并准备分享", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun importConfigFromJson(
+    jsonStr: String,
+    onImportSuccess: () -> Unit
+) {
+    try {
+        val json = JSONObject(jsonStr)
+        
+        val channels = mutableListOf<Channel>()
+        val channelsArr = json.optJSONArray("channels") ?: JSONArray()
+        for (i in 0 until channelsArr.length()) {
+            val chObj = channelsArr.getJSONObject(i)
+            val typeStr = chObj.optString("type", "WECHAT")
+            val type = try { ChannelType.valueOf(typeStr) } catch (_: Throwable) { ChannelType.WECHAT }
+            channels.add(Channel(
+                id = chObj.getString("id"),
+                name = chObj.getString("name"),
+                type = type,
+                target = chObj.getString("target")
+            ))
+        }
+        
+        val configs = mutableListOf<KeywordConfig>()
+        val configsArr = json.optJSONArray("keywordConfigs") ?: JSONArray()
+        for (i in 0 until configsArr.length()) {
+            val cfgObj = configsArr.getJSONObject(i)
+            configs.add(KeywordConfig(
+                id = cfgObj.getString("id"),
+                keyword = cfgObj.getString("keyword"),
+                channelId = cfgObj.getString("channelId")
+            ))
+        }
+        
+        val prefs = this.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        
+        saveChannels(prefs, channels)
+        saveConfigs(prefs, configs)
+        
+        editor.putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, json.optBoolean("showReceiverPhone", true))
+        editor.putBoolean(Constants.PREF_SHOW_SENDER_PHONE, json.optBoolean("showSenderPhone", true))
+        editor.putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, json.optBoolean("highlightVerificationCode", true))
+        editor.putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, json.optBoolean("batteryReminderEnabled", false))
+        editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
+        editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
+        editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
+        val reminderChannelId = json.optString("batteryReminderChannelId", null)
+        if (reminderChannelId.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
+        } else {
+            editor.putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, reminderChannelId)
+        }
+        editor.putInt(Constants.PREF_LOW_BATTERY_THRESHOLD, json.optInt("lowBatteryThreshold", Constants.DEFAULT_LOW_BATTERY_THRESHOLD))
+        editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
+        editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
+        
+        val sim1Phone = json.optString("customSim1Phone", null)
+        if (sim1Phone.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
+        } else {
+            editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1Phone)
+        }
+        
+        val sim2Phone = json.optString("customSim2Phone", null)
+        if (sim2Phone.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
+        } else {
+            editor.putString(Constants.PREF_CUSTOM_SIM2_PHONE, sim2Phone)
+        }
+        
+        editor.apply()
+        
+        LogStore.append(this, "通过二维码导入配置成功")
+        onImportSuccess()
+        Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        LogStore.append(this, "通过二维码导入配置失败: ${e.message}")
+        Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -3708,6 +4096,13 @@ private fun importConfig(
         editor.putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, json.optBoolean("batteryReminderEnabled", false))
         editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
+        editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
+        val reminderChannelId = json.optString("batteryReminderChannelId", null)
+        if (reminderChannelId.isNullOrEmpty()) {
+            editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
+        } else {
+            editor.putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, reminderChannelId)
+        }
         editor.putInt(Constants.PREF_LOW_BATTERY_THRESHOLD, json.optInt("lowBatteryThreshold", Constants.DEFAULT_LOW_BATTERY_THRESHOLD))
         editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
         editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))

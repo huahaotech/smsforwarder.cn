@@ -139,6 +139,38 @@ class SmsForegroundService : Service() {
                         prefs.edit().remove(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL).apply()
                     }
                 }
+
+                // 充电状态变化监测
+                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, true)
+                if (chargingReminderEnabled) {
+                    val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+                    val isCharging = plugged != 0
+                    val lastChargingState = prefs.getBoolean(Constants.PREF_LAST_CHARGING_STATE, false)
+                    
+                    if (isCharging && !lastChargingState) {
+                        val chargeType = when (plugged) {
+                            BatteryManager.BATTERY_PLUGGED_AC -> "AC充电"
+                            BatteryManager.BATTERY_PLUGGED_USB -> "USB充电"
+                            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线充电"
+                            else -> "充电"
+                        }
+                        var message = "【充电提醒】设备已开始${chargeType}，当前电量：$batteryPercent%"
+                        if (phoneInfo.isNotEmpty()) {
+                            message += "\n设备：$phoneInfo"
+                        }
+                        sendBatteryReminder(context, message)
+                        prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, true).apply()
+                        LogStore.append(context, "充电提醒：已开始${chargeType}，电量 $batteryPercent%")
+                    } else if (!isCharging && lastChargingState) {
+                        var message = "【充电提醒】设备已结束充电，当前电量：$batteryPercent%"
+                        if (phoneInfo.isNotEmpty()) {
+                            message += "\n设备：$phoneInfo"
+                        }
+                        sendBatteryReminder(context, message)
+                        prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, false).apply()
+                        LogStore.append(context, "充电提醒：已结束充电，电量 $batteryPercent%")
+                    }
+                }
             } catch (t: Throwable) {
                 Log.e(TAG_BATTERY, "处理电量变化失败", t)
             }
@@ -165,7 +197,19 @@ class SmsForegroundService : Service() {
                     return@execute
                 }
 
-                channels.forEach { channel ->
+                val reminderChannelId = prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, null)
+                val targetChannels = if (reminderChannelId.isNullOrEmpty()) {
+                    channels
+                } else {
+                    channels.filter { it.id == reminderChannelId }
+                }
+
+                if (targetChannels.isEmpty()) {
+                    LogStore.append(context, "电量提醒：指定通道不存在，已跳过")
+                    return@execute
+                }
+
+                targetChannels.forEach { channel ->
                     executor.execute {
                         try {
                             val jsonObject = when (channel.type) {

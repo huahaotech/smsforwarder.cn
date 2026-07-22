@@ -39,6 +39,8 @@ data class AppConfig(
     val batteryReminderEnabled: Boolean,
     val lowBatteryReminderEnabled: Boolean,
     val highBatteryReminderEnabled: Boolean,
+    val chargingReminderEnabled: Boolean,
+    val batteryReminderChannelId: String?,
     val lowBatteryThreshold: Int,
     val highBatteryThreshold: Int,
     val customSim1Phone: String?,
