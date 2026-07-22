@@ -680,7 +680,10 @@ fun SmsForwarderApp(
                             qrCodeBitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
                             showQrCodeDialog = true
                         },
-                        onImportConfig = onImportConfig
+                        onImportConfig = onImportConfig,
+                        onImportFromGallery = {
+                            imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }
                     )
                     4 -> LogTab(
                         logs = logs,
@@ -3018,7 +3021,8 @@ fun SettingsTab(
     permissionUpdateTrigger: Int,
     startOnBoot: Boolean,
     onExportConfig: () -> Unit,
-    onImportConfig: () -> Unit
+    onImportConfig: () -> Unit,
+    onImportFromGallery: () -> Unit
 ) {
     var showChannelSelectionDialog by remember { mutableStateOf(false) }
     var showImportOptionsDialog by remember { mutableStateOf(false) }
@@ -3734,7 +3738,7 @@ fun SettingsTab(
                     TextButton(
                         onClick = {
                             showImportOptionsDialog = false
-                            imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            onImportFromGallery()
                         },
                         modifier = Modifier.fillMaxWidth(),
                         contentPadding = PaddingValues(vertical = 16.dp, horizontal = 24.dp)
@@ -3840,7 +3844,7 @@ private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel
     }
 }
 
-private fun saveChannels(prefs: android.content.SharedPreferences, channels: List<Channel>) {
+internal fun saveChannels(prefs: android.content.SharedPreferences, channels: List<Channel>) {
     val arr = JSONArray()
     channels.forEach {
         val o = JSONObject()
@@ -3866,7 +3870,7 @@ private fun loadConfigs(prefs: android.content.SharedPreferences): List<KeywordC
     }
 }
 
-private fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<KeywordConfig>) {
+internal fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<KeywordConfig>) {
     val arr = JSONArray()
     configs.forEach {
         val o = JSONObject()
@@ -3987,7 +3991,7 @@ private fun exportConfig(
     }
 }
 
-private fun importConfigFromJson(
+internal fun importConfigFromJson(
     context: Context,
     jsonStr: String,
     onImportSuccess: () -> Unit
