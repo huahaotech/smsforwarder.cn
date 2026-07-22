@@ -938,20 +938,14 @@ fun SmsForwarderApp(
                     .fillMaxWidth()
                     .padding(16.dp),
                 shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(8.dp)
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         "配置二维码",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "截图保存，在另一台设备扫码导入",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                     Spacer(modifier = Modifier.height(20.dp))
@@ -963,7 +957,12 @@ fun SmsForwarderApp(
                             .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.White)
+                                .clip(RoundedCornerShape(12.dp))
+                        ) {
                             qrCodeBitmap?.let { bitmap ->
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
@@ -975,6 +974,16 @@ fun SmsForwarderApp(
                             }
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        "截图保存，可在应用卸载后重新恢复数据，或导入到其他设备",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        textAlign = TextAlign.Center
+                    )
                     
                     Spacer(modifier = Modifier.height(20.dp))
                     
@@ -1075,7 +1084,7 @@ fun PrivacyPolicyDialog(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "最后更新时间：2026年4月6日",
+                        "最后更新时间：2026年7月22日",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1171,6 +1180,7 @@ fun PrivacyPolicyDialog(
                         PolicyBullet("开机自启权限：让应用在开机后自动启动转发服务（可选）")
                         PolicyBullet("忽略电池优化权限：防止系统杀死后台服务（可选）")
                         PolicyBullet("访问网络状态权限：检测网络连接状态")
+                        PolicyBullet("相机权限：用于扫描二维码导入配置（可选）")
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("所有权限都需要您主动授权，您可以随时在系统设置中撤销。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

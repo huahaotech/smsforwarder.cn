@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.7.11-blue.svg)
+![Version](https://img.shields.io/badge/version-2.8.0-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -51,6 +51,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.8.0** | 重构二维码扫描功能：使用 CameraX + ML Kit 替代 ZXing 扫描库，提供更流畅的扫描体验；优化二维码导出弹窗样式；支持从相册选取二维码图片导入；充电提醒开关默认关闭 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.11** | 新增二维码配置导入导出功能：导出配置生成二维码，截图即可保存；扫码即可快速导入配置，方便跨设备迁移；优化电量提醒，支持指定通道发送；修复小米应用商店风险SDK检测问题 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.10** | 隐私合规整改：添加首次运行隐私政策弹窗（纯文本展示）；设置页面添加隐私政策查看入口和撤销同意功能；权限管理页面展示所有权限状态；优化隐私政策弹窗界面 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.9** | 隐私合规整改：优化权限申请时机，首次打开不再主动弹窗请求权限；用户点击开启服务时先显示权限说明对话框，引导用户到系统设置手动开启；移除直接系统权限请求弹窗 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
