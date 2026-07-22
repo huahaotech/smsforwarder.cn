@@ -72,6 +72,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.*
+import kotlinx.coroutines.awaitDispose
 
 /**
  * MainActivity: 现代简洁风格的短信转发助手主界面
