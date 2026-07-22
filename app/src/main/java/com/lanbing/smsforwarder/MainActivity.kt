@@ -94,7 +94,6 @@ class MainActivity : ComponentActivity() {
     private var onPermissionChanged: (() -> Unit)? = null
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
-    private lateinit var qrCodeScanLauncher: androidx.activity.result.ActivityResultLauncher<com.journeyapps.barcodescanner.ScanOptions>
     private lateinit var imagePickerLauncher: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,15 +102,6 @@ class MainActivity : ComponentActivity() {
         configImportLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let {
                 importConfig(this, it) {
-                    onPermissionChanged?.invoke()
-                    onConfigChanged?.invoke()
-                }
-            }
-        }
-
-        qrCodeScanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
-            if (result.contents != null) {
-                importConfigFromJson(this, result.contents) {
                     onPermissionChanged?.invoke()
                     onConfigChanged?.invoke()
                 }
@@ -192,18 +182,8 @@ class MainActivity : ComponentActivity() {
                         exportConfig(this, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
                     },
                     onImportConfig = {
-                        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.CAMERA), 1001)
-                        } else {
-                            val scanOptions = com.journeyapps.barcodescanner.ScanOptions().apply {
-                                setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                                setPrompt("扫描配置二维码")
-                                setCameraId(0)
-                                setBeepEnabled(false)
-                                setBarcodeImageEnabled(false)
-                            }
-                            qrCodeScanLauncher.launch(scanOptions)
-                        }
+                        val intent = Intent(this, ScanActivity::class.java)
+                        startActivity(intent)
                     }
                 )
             }
@@ -219,28 +199,6 @@ class MainActivity : ComponentActivity() {
     private fun onStopService() {
         val svc = Intent(this, SmsForegroundService::class.java)
         stopService(svc)
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1001) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                val scanOptions = com.journeyapps.barcodescanner.ScanOptions().apply {
-                    setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-                    setPrompt("扫描配置二维码")
-                    setCameraId(0)
-                    setBeepEnabled(false)
-                    setBarcodeImageEnabled(false)
-                }
-                qrCodeScanLauncher.launch(scanOptions)
-            } else {
-                Toast.makeText(this, "请授予相机权限以扫描二维码", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     private fun startServiceWithNotificationCheck() {
