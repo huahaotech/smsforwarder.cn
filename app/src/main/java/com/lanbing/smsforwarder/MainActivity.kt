@@ -412,7 +412,7 @@ fun SmsForwarderApp(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp
             ) {
-                tabs.forEachIndexed { index, (label, _) -&gt;
+                tabs.forEachIndexed { index, (label, _) ->
                     NavigationBarItem(
                         selected = currentTab == index,
                         onClick = { currentTab = index },
