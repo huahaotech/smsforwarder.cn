@@ -72,7 +72,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.*
-import kotlinx.coroutines.awaitDispose
 
 /**
  * MainActivity: 现代简洁风格的短信转发助手主界面
@@ -291,7 +290,7 @@ fun SmsForwarderApp(
         }
     }
     
-    LaunchedEffect(Unit) {
+    DisposableEffect(Unit) {
         val logFile = File(context.filesDir, Constants.LOG_FILE_NAME)
         val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath) {
             override fun onEvent(event: Int, path: String?) {
@@ -301,7 +300,7 @@ fun SmsForwarderApp(
             }
         }
         observer.startWatching()
-        awaitDispose {
+        onDispose {
             observer.stopWatching()
         }
     }
