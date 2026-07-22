@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.7.10-blue.svg)
+![Version](https://img.shields.io/badge/version-2.7.11-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -29,6 +29,8 @@
 - **智能重试** - 失败消息最多重试3次，指数退避策略（2s/4s/6s）
 - **持久化存储** - 失败消息保存本地，应用重启或网络恢复自动重试
 - **电量提醒** - 低电量/高电量提醒，可独立配置开关和阈值，通过配置的 Webhook 通道发送
+- **充电提醒** - 设备开始或结束充电时发送提醒，可选择发送到指定通道
+- **二维码配置导入导出** - 导出配置生成二维码，截图即可保存；扫码即可快速导入配置，方便跨设备迁移
 
 ### 🛡️ 可靠性设计
 - **前台服务常驻** - 提高在厂商定制 ROM（如 HyperOS）上的存活率
@@ -49,7 +51,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
-| **v2.7.11** | 修复小米应用商店风险SDK检测问题：在build.gradle中添加InView SDK排除规则，防止误报；项目未集成任何第三方SDK | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
+| **v2.7.11** | 新增二维码配置导入导出功能：导出配置生成二维码，截图即可保存；扫码即可快速导入配置，方便跨设备迁移；优化电量提醒，支持指定通道发送；修复小米应用商店风险SDK检测问题 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.10** | 隐私合规整改：添加首次运行隐私政策弹窗（纯文本展示）；设置页面添加隐私政策查看入口和撤销同意功能；权限管理页面展示所有权限状态；优化隐私政策弹窗界面 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.9** | 隐私合规整改：优化权限申请时机，首次打开不再主动弹窗请求权限；用户点击开启服务时先显示权限说明对话框，引导用户到系统设置手动开启；移除直接系统权限请求弹窗 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.8** | 电量提醒消息添加SIM卡手机号标识，便于区分设备；修复飞书消息格式问题；低电量和高电量提醒可独立配置开关和阈值 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
@@ -126,6 +128,10 @@
 - （可选）开启「开机自启动」
 - 建议在系统设置中允许自启动和后台保活
 
+### 4. 配置导入导出（二维码）
+- **导出配置**：在设置页面点击「导出配置」，会生成包含所有配置的二维码，截图保存即可
+- **导入配置**：在另一台设备的设置页面点击「扫码导入」，扫描保存的二维码即可完成配置迁移
+
 ---
 
 ## 🛠️ 开发者指南
@@ -133,12 +139,13 @@
 ### 项目结构
 ```
 app/src/main/java/com/lanbing/smsforwarder/
-├── MainActivity.kt              # Compose UI、规则测试、关于对话框
+├── MainActivity.kt              # Compose UI、规则测试、关于对话框、二维码导入导出
 ├── SmsReceiver.kt               # 短信接收、转发、去重、重试
 ├── SmsForegroundService.kt      # 前台服务与通知（包含电量监听）
 ├── BootReceiver.kt              # 开机启动处理
 ├── NetworkChangeReceiver.kt     # 网络状态监听
 ├── LogStore.kt                  # 日志存储
+├── QrCodeUtil.kt                # 二维码生成工具
 ├── models.kt                    # 数据模型
 └── Constants.kt                 # 常量定义
 ```
@@ -160,6 +167,7 @@ cd smsforwarder.cn
 - **语言**：Kotlin
 - **UI**：Jetpack Compose + Material Design 3
 - **网络**：OkHttp
+- **二维码**：ZXing
 - **最低支持**：Android 5.0 (API 21)
 - **目标版本**：Android 14 (API 34)
 
@@ -199,6 +207,9 @@ A: 应用会自动识别接收短信的 SIM 卡，并在转发消息中显示本
 
 ### Q: 如何测试关键词规则？
 A: 在设置页面点击「测试规则」按钮，输入测试短信内容，应用会显示匹配的规则和目标通道。
+
+### Q: 如何在多个设备间同步配置？
+A: 使用二维码导入导出功能：在源设备的设置页面点击「导出配置」生成二维码并截图，然后在目标设备的设置页面点击「扫码导入」扫描二维码即可完成配置迁移。
 
 ---
 

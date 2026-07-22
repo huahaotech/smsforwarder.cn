@@ -33,7 +33,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -104,7 +106,7 @@ class MainActivity : ComponentActivity() {
 
         qrCodeScanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
             if (result.contents != null) {
-                importConfigFromJson(result.contents) {
+                importConfigFromJson(this, result.contents) {
                     onPermissionChanged?.invoke()
                     onConfigChanged?.invoke()
                 }
@@ -276,7 +278,7 @@ fun SmsForwarderApp(
         customSim1Phone: String?,
         customSim2Phone: String?,
         startOnBoot: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -&gt; },
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onImportConfig: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -982,13 +984,13 @@ fun SmsForwarderApp(
                             .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (qrCodeBitmap != null) {
+                        qrCodeBitmap?.let { bitmap ->
                             Image(
-                                bitmap = qrCodeBitmap.asImageBitmap(),
+                                bitmap = bitmap.asImageBitmap(),
                                 contentDescription = "配置二维码",
                                 modifier = Modifier.fillMaxSize()
                             )
-                        } else {
+                        } ?: run {
                             CircularProgressIndicator(modifier = Modifier.size(48.dp))
                         }
                     }
@@ -3966,6 +3968,7 @@ private fun exportConfig(
 }
 
 private fun importConfigFromJson(
+    context: Context,
     jsonStr: String,
     onImportSuccess: () -> Unit
 ) {
@@ -3997,7 +4000,7 @@ private fun importConfigFromJson(
             ))
         }
         
-        val prefs = this.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         
         saveChannels(prefs, channels)
@@ -4036,13 +4039,13 @@ private fun importConfigFromJson(
         
         editor.apply()
         
-        LogStore.append(this, "通过二维码导入配置成功")
+        LogStore.append(context, "通过二维码导入配置成功")
         onImportSuccess()
-        Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "配置导入成功", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         e.printStackTrace()
-        LogStore.append(this, "通过二维码导入配置失败: ${e.message}")
-        Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        LogStore.append(context, "通过二维码导入配置失败: ${e.message}")
+        Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 
