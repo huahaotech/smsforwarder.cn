@@ -324,12 +324,15 @@ class SmsForegroundService : Service() {
         
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
+                @Suppress("DEPRECATION")
                 val subscriptionManager = SubscriptionManager.from(context)
                 val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
                 if (activeSubscriptions != null) {
                     activeSubscriptions.forEach { subInfo ->
                         try {
+                            @Suppress("DEPRECATION")
                             if (subInfo != null && !subInfo.number.isNullOrBlank()) {
+                                @Suppress("DEPRECATION")
                                 phoneNumbers.add(subInfo.number)
                             }
                         } catch (e: Exception) {
@@ -343,12 +346,8 @@ class SmsForegroundService : Service() {
             if (phoneNumbers.isEmpty()) {
                 val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                 if (telephonyManager != null) {
-                    val number = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        telephonyManager.line1Number
-                    } else {
-                        @Suppress("DEPRECATION")
-                        telephonyManager.line1Number
-                    }
+                    @Suppress("DEPRECATION")
+                    val number = telephonyManager.line1Number
                     if (!number.isNullOrBlank()) {
                         phoneNumbers.add(number)
                     }

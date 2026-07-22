@@ -54,6 +54,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -178,9 +179,6 @@ class MainActivity : ComponentActivity() {
                     },
                     onStartService = { startServiceWithNotificationCheck() },
                     onStopService = { onStopService() },
-                    onExportConfig = { channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot ->
-                        exportConfig(this, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
-                    },
                     onImportConfig = {
                         val intent = Intent(this, ScanActivity::class.java)
                         startActivity(intent)
@@ -240,23 +238,6 @@ fun SmsForwarderApp(
     onRequestNotificationPermission: () -> Unit,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onExportConfig: (
-        channels: List<Channel>,
-        configs: List<KeywordConfig>,
-        showReceiverPhone: Boolean,
-        showSenderPhone: Boolean,
-        highlightVerificationCode: Boolean,
-        batteryReminderEnabled: Boolean,
-        lowBatteryReminderEnabled: Boolean,
-        highBatteryReminderEnabled: Boolean,
-        chargingReminderEnabled: Boolean,
-        batteryReminderChannelId: String?,
-        lowBatteryThreshold: Int,
-        highBatteryThreshold: Int,
-        customSim1Phone: String?,
-        customSim2Phone: String?,
-        startOnBoot: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
     onImportConfig: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -325,6 +306,7 @@ fun SmsForwarderApp(
     
     DisposableEffect(Unit) {
         val logFile = File(context.filesDir, Constants.LOG_FILE_NAME)
+        @Suppress("DEPRECATION")
         val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath, FileObserver.MODIFY or FileObserver.CREATE) {
             override fun onEvent(event: Int, path: String?) {
                 if (path == Constants.LOG_FILE_NAME && event and (MODIFY or CREATE) != 0) {
@@ -430,7 +412,7 @@ fun SmsForwarderApp(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp
             ) {
-                tabs.forEachIndexed { index, (label, icon) ->
+                tabs.forEachIndexed { index, (label, _) -&gt;
                     NavigationBarItem(
                         selected = currentTab == index,
                         onClick = { currentTab = index },
@@ -445,7 +427,7 @@ fun SmsForwarderApp(
                             }
                             val outlinedIcon = when (index) {
                                 0 -> Icons.Outlined.Home
-                                1 -> Icons.Outlined.Label
+                                1 -> Icons.AutoMirrored.Outlined.Label
                                 2 -> Icons.Outlined.Cloud
                                 3 -> Icons.Outlined.Settings
                                 4 -> Icons.Outlined.History
@@ -1880,7 +1862,7 @@ fun TestRuleDialog(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.Outlined.Rule,
+                                    Icons.AutoMirrored.Outlined.Rule,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -2273,6 +2255,7 @@ private fun getSimCardInfo(context: Context, customSim1Phone: String? = null, cu
 
         val subscriptionManager = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                @Suppress("DEPRECATION")
                 SubscriptionManager.from(context)
             } else {
                 null
@@ -2292,6 +2275,7 @@ private fun getSimCardInfo(context: Context, customSim1Phone: String? = null, cu
                     try {
                         val slotIndex = index + 1
                         val customPhone = if (slotIndex == 1) customSim1Phone else if (slotIndex == 2) customSim2Phone else null
+                        @Suppress("DEPRECATION")
                         val phoneNumber = customPhone ?: subInfo?.number?.takeIf { it.isNotBlank() }
                         simCards.add(
                             SimCardInfo(
@@ -2336,12 +2320,8 @@ private fun getSimCardInfo(context: Context, customSim1Phone: String? = null, cu
                 try {
                     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                     if (telephonyManager != null) {
-                        val phoneNumber = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            telephonyManager.line1Number
-                        } else {
-                            @Suppress("DEPRECATION")
-                            telephonyManager.line1Number
-                        }
+                        @Suppress("DEPRECATION")
+                        val phoneNumber = telephonyManager.line1Number
                         val carrierName = try {
                             telephonyManager.networkOperatorName
                         } catch (e: Exception) {
@@ -2773,7 +2753,7 @@ fun KeywordTab(
                             label = { Text("转发通道") },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             leadingIcon = {
-                                Icon(Icons.Outlined.Send, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
                             },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(configChannelDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp)
@@ -2893,7 +2873,7 @@ fun ChannelTab(
                         label = { Text("通道名称") },
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = {
-                            Icon(Icons.Outlined.Label, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Outlined.Label, contentDescription = null)
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -3514,7 +3494,7 @@ fun SettingsTab(
                     }
 
                     PermissionManagementItem(
-                        icon = Icons.Outlined.Message,
+                        icon = Icons.AutoMirrored.Outlined.Message,
                         title = "短信权限",
                         description = "用于接收并识别短信内容",
                         granted = smsGranted,

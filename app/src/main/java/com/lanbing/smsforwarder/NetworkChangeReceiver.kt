@@ -29,6 +29,7 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         private var lastNetworkState = false
     }
 
+    @Suppress("DEPRECATION")
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ConnectivityManager.CONNECTIVITY_ACTION) return
 

@@ -246,6 +246,7 @@ class SmsReceiver : BroadcastReceiver() {
                         // slot 转换为 subscriptionId
                         try {
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                                @Suppress("DEPRECATION")
                                 val subscriptionManager = SubscriptionManager.from(context)
                                 val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
                                 if (activeSubscriptions != null && subscriptionId >= 0 && activeSubscriptions.size > subscriptionId) {
@@ -399,6 +400,7 @@ class SmsReceiver : BroadcastReceiver() {
             if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
                 try {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                        @Suppress("DEPRECATION")
                         val subscriptionManager = SubscriptionManager.from(context)
                         val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
                         if (activeSubscriptions != null) {
@@ -437,9 +439,11 @@ class SmsReceiver : BroadcastReceiver() {
                 // 如果有 subscriptionId，尝试通过 subscriptionId 获取号码
                 if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 && foundMatchingSim) {
                     try {
+                        @Suppress("DEPRECATION")
                         val subscriptionManager = SubscriptionManager.from(context)
                         val subInfo = subscriptionManager.getActiveSubscriptionInfo(subscriptionId)
                         if (subInfo != null) {
+                            @Suppress("DEPRECATION")
                             val number = subInfo.number
                             if (!number.isNullOrBlank()) {
                                 return number
@@ -454,12 +458,8 @@ class SmsReceiver : BroadcastReceiver() {
                 try {
                     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                     if (telephonyManager != null) {
-                        val number = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            telephonyManager.line1Number
-                        } else {
-                            @Suppress("DEPRECATION")
-                            telephonyManager.line1Number
-                        }
+                        @Suppress("DEPRECATION")
+                        val number = telephonyManager.line1Number
                         if (!number.isNullOrBlank()) {
                             return number
                         }

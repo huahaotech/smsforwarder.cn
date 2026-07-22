@@ -140,8 +140,6 @@ class ScanActivity : ComponentActivity() {
     private fun parseAndImportConfig(jsonStr: String): Boolean {
         return try {
             JSONObject(jsonStr)
-            
-            val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
             importConfigFromJson(this, jsonStr) {
                 Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
             }

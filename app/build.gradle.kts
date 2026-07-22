@@ -131,6 +131,9 @@ dependencies {
     // Icons (material icons extended) — 添加以解决 Icons.Default.History / Message 等引用
     implementation("androidx.compose.material:material-icons-extended:$composeUiVersion")
 
+    // Fragment (required for ActivityResultLauncher)
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
+
     // Networking
     implementation("com.squareup.okhttp3:okhttp:$okhttpVersion")
 
