@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 應用名稱 -->
+    <string name="app_name">短信轉發助手</string>
+    <string name="app_subtitle">服務執行中</string>
+    <string name="app_subtitle_stopped">服務已停止</string>
+    <string name="notification_stop">停止服務</string>
+    <string name="notification_settings">通知設定</string>
+    <string name="notification_app_settings">應用設定</string>
+    
+    <!-- Tab 名稱 -->
+    <string name="tab_home">首頁</string>
+    <string name="tab_keyword">關鍵字</string>
+    <string name="tab_channel">通道</string>
+    <string name="tab_settings">設定</string>
+    <string name="tab_log">日誌</string>
+    
+    <!-- 首頁 -->
+    <string name="service_title">轉發服務</string>
+    <string name="notification_permission">通知權限</string>
+    <string name="sms_permission">短信權限</string>
+    <string name="battery_optimization">電池最佳化白名單</string>
+    <string name="start_on_boot">開機自啟動</string>
+    <string name="start_on_boot_desc">設備啟動後自動執行</string>
+    <string name="security_warning">請確保轉發通道是您信任的來源，避免驗證碼洩露</string>
+    
+    <!-- 關鍵字配置 -->
+    <string name="keyword_title">關鍵字配置</string>
+    <string name="keyword_input_hint">輸入關鍵字（留白表示全部）</string>
+    <string name="select_channel">選擇通道</string>
+    <string name="add_keyword">新增關鍵字</string>
+    <string name="edit_keyword">編輯關鍵字</string>
+    <string name="keyword_placeholder">關鍵字（留白表示全部）</string>
+    
+    <!-- 通道管理 -->
+    <string name="channel_title">通道管理</string>
+    <string name="channel_name">通道名稱</string>
+    <string name="channel_type">通道類型</string>
+    <string name="webhook_url">Webhook 位址</string>
+    <string name="add_channel">新增通道</string>
+    <string name="edit_channel">編輯通道</string>
+    <string name="channel_type_wechat">企業微信</string>
+    <string name="channel_type_dingtalk">釘釘</string>
+    <string name="channel_type_feishu">飛書</string>
+    <string name="channel_type_generic">自訂 Webhook</string>
+    
+    <!-- 設定 -->
+    <string name="settings_title">設定</string>
+    <string name="show_receiver_phone">顯示本機號碼</string>
+    <string name="show_sender_phone">顯示發送者號碼</string>
+    <string name="highlight_verification_code">突出顯示驗證碼</string>
+    <string name="battery_reminder">電量提醒</string>
+    <string name="low_battery_reminder">低電量提醒</string>
+    <string name="high_battery_reminder">高電量提醒</string>
+    <string name="charging_reminder">充電提醒</string>
+    <string name="battery_threshold">電量閾值</string>
+    <string name="test_rule">規則測試</string>
+    <string name="privacy_policy">隱私政策</string>
+    <string name="revoke_consent">撤回同意</string>
+    <string name="export_config">匯出配置</string>
+    <string name="import_config">掃碼匯入</string>
+    <string name="import_from_gallery">從相簿匯入</string>
+    <string name="about">關於</string>
+    
+    <!-- 日誌 -->
+    <string name="log_title">轉發日誌</string>
+    <string name="refresh">重新整理</string>
+    <string name="clear_log">清空日誌</string>
+    <string name="log_cleared">日誌已清除</string>
+    <string name="no_logs">暫無日誌</string>
+    
+    <!-- 對話框 -->
+    <string name="dialog_ok">確定</string>
+    <string name="dialog_cancel">取消</string>
+    <string name="dialog_close">關閉</string>
+    <string name="dialog_save">儲存</string>
+    <string name="dialog_agree">同意</string>
+    <string name="dialog_disagree">不同意</string>
+    <string name="dialog_i_know">我知道了</string>
+    <string name="dialog_go_settings">前往設定</string>
+    
+    <!-- 權限說明 -->
+    <string name="permission_needed">需要權限</string>
+    <string name="permission_explanation">短信轉發助手需要以下權限才能正常運作：\n\n• 短信權限：用於接收並識別短信內容\n• 通知權限：用於顯示服務執行狀態和提醒\n\n請在系統設定中開啟這些權限。</string>
+    <string name="permission_later">稍後</string>
+    
+    <!-- 開機自啟動提示 -->
+    <string name="boot_tip_title">重要提示</string>
+    <string name="boot_tip_content">要讓開機自啟動正常工作，您還需要在系統設定中開啟應用的自啟動權限。\n\n通常在：設定 → 應用管理 → 短信轉發助手 → 權限管理/自啟動管理</string>
+    
+    <!-- 二維碼 -->
+    <string name="qr_code_title">配置二維碼</string>
+    <string name="qr_code_desc">截圖儲存，可在應用解除安裝後重新恢復數據，或匯入到其他設備</string>
+    
+    <!-- 提示信息 -->
+    <string name="please_add_channel">請先新增通道</string>
+    <string name="please_select_channel">請選擇通道</string>
+    <string name="please_fill_channel_info">請填寫通道名稱和 Webhook 位址</string>
+    <string name="invalid_webhook_url">Webhook 位址格式無效，請輸入有效的 http:// 或 https:// 位址</string>
+    <string name="config_added">配置已新增</string>
+    <string name="channel_added">通道已新增</string>
+    <string name="service_started">服務已啟動</string>
+    <string name="service_stopped">服務已停止</string>
+    <string name="start_on_boot_enabled">已開啟開機啟動</string>
+    <string name="start_on_boot_disabled">已關閉開機啟動</string>
+    <string name="show_receiver_phone_enabled">已開啟顯示本機號碼</string>
+    <string name="show_receiver_phone_disabled">已關閉顯示本機號碼</string>
+    <string name="show_sender_phone_enabled">已開啟顯示發送者號碼</string>
+    <string name="show_sender_phone_disabled">已關閉顯示發送者號碼</string>
+    <string name="highlight_code_enabled">已開啟突出顯示驗證碼</string>
+    <string name="highlight_code_disabled">已關閉突出顯示驗證碼</string>
+    <string name="battery_reminder_enabled">已開啟電量提醒</string>
+    <string name="battery_reminder_disabled">已關閉電量提醒</string>
+    <string name="low_battery_reminder_enabled">已開啟低電量提醒</string>
+    <string name="low_battery_reminder_disabled">已關閉低電量提醒</string>
+    <string name="high_battery_reminder_enabled">已開啟高電量提醒</string>
+    <string name="high_battery_reminder_disabled">已關閉高電量提醒</string>
+    <string name="charging_reminder_enabled">已開啟充電提醒</string>
+    <string name="charging_reminder_disabled">已關閉充電提醒</string>
+    <string name="open_system_settings">請手動開啟系統設定</string>
+    <string name="notification_required">請允許應用通知（將開啟通知設定）</string>
+    <string name="qr_code_not_recognized">未能識別圖片中的二維碼</string>
+    
+    <!-- 日誌消息 -->
+    <string name="log_service_started">服務已啟動（由使用者開啟）</string>
+    <string name="log_service_stopped">服務已停止（由使用者關閉）</string>
+    <string name="log_no_channels">未配置通道或關鍵字規則，已跳過轉發</string>
+    <string name="log_skip_duplicate">跳過重複消息</string>
+    <string name="log_forward_success">轉發成功 — 來自: %s -> %s (規則: %s)</string>
+    <string name="log_forward_failed">轉發失敗 — 來自: %s -> %s (規則: %s) | 原因: %s</string>
+    <string name="log_retry_success">重試轉發成功 -&gt; %s</string>
+    <string name="log_retry_failed">重試轉發失敗（已達最大次數）-&gt; %s | 原因: %s</string>
+    <string name="log_timeout">部分轉發任務超時（等待 %ds 後返回）</string>
+    <string name="log_webhook_invalid">通道 %s webhook 格式無效: %s</string>
+    
+    <!-- 電量提醒 -->
+    <string name="battery_low_reminder">電量提醒：低電量 %d%%</string>
+    <string name="battery_high_reminder">電量提醒：高電量 %d%%</string>
+    <string name="battery_no_channels">電量提醒：未配置通道，已跳過</string>
+    <string name="battery_channel_not_found">電量提醒：指定通道不存在，已跳過</string>
+    <string name="battery_reminder_success">電量提醒發送成功 -&gt; %s</string>
+    <string name="battery_reminder_failed">電量提醒發送失敗 -&gt; %s: HTTP %d %s</string>
+    <string name="charging_start">充電提醒：已開始%s，電量 %d%%</string>
+    <string name="charging_end">充電提醒：已結束充電，電量 %d%%</string>
+    
+    <!-- 隱私政策 -->
+    <string name="privacy_title">隱私政策</string>
+    <string name="privacy_last_update">最後更新時間：2026年7月22日</string>
+    <string name="privacy_overview">概述</string>
+    <string name="privacy_core_principles">核心原則</string>
+    <string name="privacy_info_collection">資訊收集與使用</string>
+    <string name="privacy_permissions">權限說明</string>
+    <string name="privacy_data_storage">數據儲存</string>
+    <string name="privacy_your_rights">您的權利</string>
+    <string name="privacy_third_party">第三方服務</string>
+    <string name="privacy_updates">政策更新</string>
+    <string name="privacy_contact">聯絡我們</string>
+    <string name="privacy_overview_text">短信轉發助手（以下簡稱"我們"）非常重視使用者的隱私保護。本隱私政策說明了我們如何收集、使用、儲存和保護您的個人資訊。使用我們的應用即表示您同意本政策中描述的做法。</string>
+    <string name="privacy_app_name">應用名稱：短信轉發助手</string>
+    <string name="privacy_developer">開發者：華昊科技有限公司</string>
+    <string name="privacy_email">聯絡信箱：support@smsforwarder.cn</string>
+    <string name="privacy_website">官方網站：https://smsforwarder.cn/</string>
+    <string name="privacy_license">備案號：魯ICP備2026018166號-2A</string>
+    <string name="privacy_principle_no_upload">不上雲：所有數據都在您的手機本機處理，不會上傳到我們的伺服器</string>
+    <string name="privacy_principle_no_collect">不收集：不會收集您的個人資訊、短信內容等敏感數據</string>
+    <string name="privacy_principle_no_track">不追蹤：不集成任何統計、分析或廣告 SDK</string>
+    <string name="privacy_principle_full_control">完全可控：所有權限和數據都由您自己掌控</string>
+    <string name="privacy_sms_content">短信內容（敏感資訊）</string>
+    <string name="privacy_sms_purpose">用途：僅在您的手機本機用於匹配關鍵字規則和執行轉發</string>
+    <string name="privacy_sms_storage">儲存：不會保存到任何伺服器，僅在轉發時臨時處理</string>
+    <string name="privacy_sms_important">重要：唯一會發送短信內容的情況是您主動配置了 Webhook 轉發目標（如企業微信、釘釘、飛書或自訂 Webhook），應用會將短信直接發送到您指定的目標，不會經過我們的伺服器。</string>
+    <string name="privacy_config">配置資訊</string>
+    <string name="privacy_config_text">您設定的轉發通道、關鍵字規則等配置資訊保存在您手機的本機儲存中，不會上傳。</string>
+    <string name="privacy_logs">轉發日誌</string>
+    <string name="privacy_logs_text">應用會在本機記錄轉發歷史（最多200條），方便您查看和調試，這些日誌僅儲存在您的手機上。</string>
+    <string name="privacy_permission_sms">接收短信權限：監聽設備收到的短信，用於執行轉發功能</string>
+    <string name="privacy_permission_notification">通知權限：顯示前台服務通知，讓您知道服務正在運行</string>
+    <string name="privacy_permission_phone">讀取手機狀態權限：用於識別雙卡手機的 SIM 卡資訊和獲取本機號碼（可選）</string>
+    <string name="privacy_permission_network">網路權限：僅用於轉發到您配置的 Webhook</string>
+    <string name="privacy_permission_foreground">前台服務權限：保持應用在後台穩定運行</string>
+    <string name="privacy_permission_boot">開機自啟權限：讓應用在開機後自動啟動轉發服務（可選）</string>
+    <string name="privacy_permission_battery">忽略電池最佳化權限：防止系統終止後台服務（可選）</string>
+    <string name="privacy_permission_network_state">訪問網路狀態權限：檢測網路連線狀態</string>
+    <string name="privacy_permission_camera">相機權限：用於掃描二維碼匯入配置（可選）</string>
+    <string name="privacy_permission_note">所有權限都需要您主動授權，您可以隨時在系統設定中撤銷。</string>
+    <string name="privacy_local_storage">本機儲存</string>
+    <string name="privacy_local_text">所有數據都儲存在您手機的私有目錄中，包括：</string>
+    <string name="privacy_local_channels">轉發通道和關鍵字配置</string>
+    <string name="privacy_local_logs">轉發歷史日誌</string>
+    <string name="privacy_local_settings">應用設定</string>
+    <string name="privacy_server_storage">伺服器儲存</string>
+    <string name="privacy_server_text">我們沒有伺服器儲存您的數據！應用是純本機運行的工具，我們不收集、不儲存、不上傳任何使用者數據。</string>
+    <string name="privacy_right_view">查看數據：可以在應用內查看所有轉發日誌</string>
+    <string name="privacy_right_delete">刪除數據：可以在應用內清空日誌，或解除安裝應用刪除所有數據</string>
+    <string name="privacy_right_control">控制權限：可以在系統設定中隨時授予或撤銷權限</string>
+    <string name="privacy_right_revoke">撤回同意：可以在應用設定中撤回隱私政策同意</string>
+    <string name="privacy_third_party_text">關於轉發目標：如果您配置了 Webhook 或其他第三方服務作為轉發目標，短信內容會發送到該第三方。請您謹慎選擇轉發目標，並確保了解其隱私政策。我們不對第三方的數據處理負責。</string>
+    <string name="privacy_third_party_sdk">第三方 SDK</string>
+    <string name="privacy_third_party_sdk_text">當前版本未集成任何第三方 SDK（包括統計、廣告、崩潰分析等）。</string>
+    <string name="privacy_updates_text">我們可能會不時更新本隱私政策。重大變更時，我們會通過應用內通知或其他方式告知您。建議您定期查看本政策以了解最新資訊。</string>
+    <string name="privacy_contact_text">如果您對本隱私政策有任何疑問或建議，請通過以下方式聯絡我們：</string>
+    
+    <!-- 設定頁面 - 電量提醒 -->
+    <string name="battery_reminder_section">電量提醒</string>
+    <string name="enable_battery_reminder">開啟電量提醒</string>
+    <string name="enable_battery_reminder_desc">電量變化時發送通知提醒</string>
+    <string name="low_battery_reminder_title">低電量提醒</string>
+    <string name="low_battery_reminder_desc">電量低於閾值時提醒</string>
+    <string name="low_battery_threshold_title">低電量提醒閾值</string>
+    <string name="low_battery_threshold_desc">當電量低於此閾值時提醒</string>
+    <string name="high_battery_reminder_title">高電量提醒</string>
+    <string name="high_battery_reminder_desc">電量高於閾值時提醒</string>
+    <string name="high_battery_threshold_title">高電量提醒閾值</string>
+    <string name="high_battery_threshold_desc">當電量高於此閾值時提醒</string>
+    <string name="charging_reminder_title">充電提醒</string>
+    <string name="charging_reminder_desc">設備開始或結束充電時發送提醒</string>
+    <string name="reminder_channel">提醒通道</string>
+    <string name="reminder_channel_desc">選擇發送電量提醒的通道，不選擇則發送到所有通道</string>
+    <string name="all_channels">所有通道</string>
+    <string name="unknown_channel">未知通道</string>
+    
+    <!-- 設定頁面 - 消息格式 -->
+    <string name="message_format">消息格式</string>
+    <string name="show_receiver_phone_desc">轉發時顯示接收短信的本機號碼</string>
+    <string name="show_sender_phone_desc">轉發時顯示短信發送者號碼</string>
+    <string name="highlight_code_desc">自動識別並突出顯示驗證碼</string>
+    
+    <!-- 設定頁面 - 工具 -->
+    <string name="tools">工具</string>
+    <string name="test_rule">規則測試</string>
+    
+    <!-- 設定頁面 - 權限管理 -->
+    <string name="permission_management">權限管理</string>
+    <string name="permission_sms_title">短信權限</string>
+    <string name="permission_sms_desc">用於接收並識別短信內容</string>
+    <string name="permission_notification_title">通知權限</string>
+    <string name="permission_notification_desc">用於顯示服務執行狀態和提醒</string>
+    <string name="permission_phone_title">讀取手機狀態</string>
+    <string name="permission_phone_desc">用於識別雙卡手機的SIM卡資訊（可選）</string>
+    <string name="permission_battery_title">忽略電池最佳化</string>
+    <string name="permission_battery_desc">防止系統終止後台服務（可選）</string>
+    
+    <!-- 設定頁面 - 隱私設定 -->
+    <string name="privacy_settings">隱私設定</string>
+    
+    <!-- 設定頁面 - 對話框 -->
+    <string name="select_reminder_channel">選擇提醒通道</string>
+    <string name="select_reminder_channel_desc">選擇發送電量提醒的通道，選擇「所有通道」則發送到全部已配置通道</string>
+    <string name="select_import_method">選擇匯入方式</string>
+    
+    <!-- 日誌頁面 -->
+    <string name="log_count">%d 條記錄</string>
+    <string name="refresh">重新整理</string>
+    <string name="clear">清除</string>
+    
+    <!-- 關於對話框 -->
+    <string name="about_title">關於</string>
+    <string name="about_version">版本 %s</string>
+    <string name="about_developer">開發者：華昊科技有限公司</string>
+    <string name="about_email">support@smsforwarder.cn</string>
+    <string name="about_website">官網</string>
+    <string name="about_description">輕量、穩定、開源的 Android 短信轉發應用。支援企業微信、釘釘、飛書和自訂 Webhook 等多種轉發渠道，支援關鍵字過濾、驗證碼提取、本機號碼識別等功能。</string>
+    <string name="about_copyright">© 2026 華昊科技有限公司</string>
+    <string name="unknown_version">未知版本</string>
+    
+    <!-- 通道類型標籤 -->
+    <string name="channel_type_wechat">企業微信</string>
+    <string name="channel_type_dingtalk">釘釘</string>
+    <string name="channel_type_feishu">飛書</string>
+    <string name="channel_type_generic">自訂 Webhook</string>
+    
+    <!-- 電量提醒消息格式 -->
+    <string name="battery_low_message">【電量提醒】當前電量：%d%%，電量較低，請及時充電</string>
+    <string name="battery_high_message">【電量提醒】當前電量：%d%%，電量充足</string>
+    <string name="charging_start_message">【充電提醒】設備已開始%s，當前電量：%d%%</string>
+    <string name="charging_end_message">【充電提醒】設備已結束充電，當前電量：%d%%</string>
+    <string name="battery_device_info">設備：%s</string>
+    
+    <!-- 充電類型 -->
+    <string name="charge_type_ac">AC充電</string>
+    <string name="charge_type_usb">USB充電</string>
+    <string name="charge_type_wireless">無線充電</string>
+    <string name="charge_type_unknown">充電</string>
+    
+    <!-- 日誌調試信息 -->
+    <string name="log_debug_notif">DEBUG: notifAllowed=%s ; %s</string>
+    <string name="log_debug_channel_failed">DEBUG: 檢查 channel 失敗: %s</string>
+    <string name="log_start_foreground_failed">錯誤: startForeground 失敗: %s %s</string>
+    
+    <!-- 電量相關 -->
+    <string name="battery_info_unavailable">無法獲取電量資訊</string>
+    
+    <!-- 通知通道 -->
+    <string name="notification_channel_name">短信轉發服務</string>
+    
+    <!-- 權限狀態 -->
+    <string name="permission_granted">已授權</string>
+    <string name="permission_not_granted">未授權</string>
+    
+    <!-- 訊息格式 -->
+    <string name="msg_code_label">驗證碼: %s</string>
+    <string name="msg_receiver_label">本機: %s</string>
+    <string name="msg_sender_label">來自: %s</string>
+    
+    <!-- SIM卡資訊 -->
+    <string name="custom_rom_tip">小米/澎湃OS等客製ROM通常無法自動獲取本機號碼，請手動輸入</string>
+    <string name="cannot_read_sim">無法讀取 SIM 卡資訊</string>
+    <string name="set_sim_number">設定 SIM%d 號碼</string>
+    <string name="manual_input_hint">如果無法自動獲取本機號碼，可以手動輸入</string>
+    <string name="phone_number_example">例如：13800138000</string>
+    
+    <!-- 配置項 -->
+    <string name="all_messages">全部訊息</string>
+    <string name="edit">編輯</string>
+    <string name="delete">刪除</string>
+    <string name="save">儲存</string>
+    <string name="cancel">取消</string>
+    <string name="custom">自訂</string>
+    <string name="my_phone_number">本機號碼</string>
+    <string name="enter_phone_number">點擊編輯按鈕手動輸入本機號碼</string>
+    <string name="need_phone_permission">需要電話權限才能自動獲取本機號碼</string>
+    <string name="cannot_get_number">無法獲取號碼</string>
+    
+    <!-- SIM卡資訊 -->
+    <string name="sim_card_info">SIM 卡資訊</string>
+    <string name="click_to_enable_or_manual">點擊前往設定開啟權限，或手動輸入號碼</string>
+    <string name="custom">自訂</string>
+    
+    <!-- 測試規則 -->
+    <string name="test_rule_title">測試轉發規則</string>
+    <string name="test_rule_hint">輸入短信內容測試匹配</string>
+    <string name="enter_test_content">輸入測試短信內容</string>
+    <string name="match_result">匹配結果</string>
+    <string name="no_match">沒有匹配的規則</string>
+    <string name="please_enter_content">請輸入內容開始測試</string>
+    <string name="keyword_label">關鍵字: %s</string>
+    
+    <!-- 網路錯誤 -->
+    <string name="network_success">成功</string>
+    <string name="network_timeout">連線逾時</string>
+    <string name="network_unknown_host">網域解析失敗</string>
+    <string name="network_connection_refused">連線被拒絕</string>
+    <string name="network_io_error">網路錯誤: %s</string>
+    <string name="network_unknown_error">未知錯誤: %s</string>
+    <string name="network_cannot_read_response">無法讀取回應</string>
+    <string name="network_no_response_body">無回應體</string>
+    
+    <!-- 開機啟動 -->
+    <string name="boot_start_failed_notification">開機啟動失敗：缺少通知權限</string>
+    <string name="boot_start_failed_sms">開機啟動失敗：缺少短信權限</string>
+    <string name="boot_start_success">設備開機：根據設定已啟動前台服務</string>
+    <string name="boot_start_failed">開機啟動服務失敗: %s</string>
+    
+    <!-- 網路 -->
+    <string name="network_recovered">網路已恢復，觸發失敗消息重試</string>
+    
+    <!-- 掃描 -->
+    <string name="scan_camera_permission">請授予相機權限以掃描二維碼</string>
+    <string name="scan_success">配置匯入成功</string>
+    <string name="scan_title">掃描二維碼</string>
+    <string name="scan_hint">將二維碼對準掃描框</string>
+    <string name="scan_auto">系統將自動識別</string>
+    <string name="scan_back">返回</string>
+    
+    <!-- 日誌消息 -->
+    <string name="log_add_keyword">新增關鍵字: %s -> %s</string>
+    <string name="log_add_channel">新增通道: %s (%s)</string>
+    <string name="log_delete_channel">刪除通道: %s</string>
+    <string name="log_edit_channel">編輯通道: %s</string>
+    <string name="log_edit_keyword">編輯關鍵字: %s -> %s</string>
+    
+    <!-- 通道對話框 -->
+    <string name="dialog_edit_channel">編輯通道</string>
+    <string name="dialog_edit_config">編輯關鍵字配置</string>
+    <string name="dialog_forward_channel">轉發通道</string>
+    <string name="dialog_select_channel">選擇通道</string>
+    
+    <!-- 權限對話框 -->
+    <string name="dialog_permission_later">稍後</string>
+    
+    <!-- 服務通知 -->
+    <string name="service_notification_title">短信轉發助手</string>
+    
+    <!-- 關於圖標描述 -->
+    <string name="icon_about">關於</string>
+</resources>

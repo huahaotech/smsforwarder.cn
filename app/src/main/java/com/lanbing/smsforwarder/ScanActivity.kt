@@ -58,7 +58,7 @@ class ScanActivity : ComponentActivity() {
             if (granted) {
                 startCamera()
             } else {
-                Toast.makeText(this, "请授予相机权限以扫描二维码", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.scan_camera_permission), Toast.LENGTH_LONG).show()
                 finish()
             }
         }
@@ -141,7 +141,7 @@ class ScanActivity : ComponentActivity() {
         return try {
             JSONObject(jsonStr)
             importConfigFromJson(this, jsonStr) {
-                Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.scan_success), Toast.LENGTH_SHORT).show()
             }
             true
         } catch (e: Exception) {
@@ -181,13 +181,13 @@ fun ScanScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "扫描二维码",
+                        text = LocalContext.current.getString(R.string.scan_title),
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = LocalContext.current.getString(R.string.scan_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -254,7 +254,7 @@ fun ScanScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "将二维码对准扫描框",
+                        text = LocalContext.current.getString(R.string.scan_hint),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
@@ -262,7 +262,7 @@ fun ScanScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "系统将自动识别",
+                        text = LocalContext.current.getString(R.string.scan_auto),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center

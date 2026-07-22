@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App Name -->
+    <string name="app_name">SMS Forwarder</string>
+    <string name="app_subtitle">Service Running</string>
+    <string name="app_subtitle_stopped">Service Stopped</string>
+    <string name="notification_stop">Stop Service</string>
+    <string name="notification_settings">Notification Settings</string>
+    <string name="notification_app_settings">App Settings</string>
+    
+    <!-- Tab Names -->
+    <string name="tab_home">Home</string>
+    <string name="tab_keyword">Keywords</string>
+    <string name="tab_channel">Channels</string>
+    <string name="tab_settings">Settings</string>
+    <string name="tab_log">Logs</string>
+    
+    <!-- Home Page -->
+    <string name="service_title">Forwarding Service</string>
+    <string name="notification_permission">Notification Permission</string>
+    <string name="sms_permission">SMS Permission</string>
+    <string name="battery_optimization">Battery Optimization Whitelist</string>
+    <string name="start_on_boot">Auto-start on Boot</string>
+    <string name="start_on_boot_desc">Auto-run after device startup</string>
+    <string name="security_warning">Please ensure forwarding channels are trusted sources to avoid verification code leakage</string>
+    
+    <!-- Keyword Configuration -->
+    <string name="keyword_title">Keyword Configuration</string>
+    <string name="keyword_input_hint">Enter keyword (leave blank for all)</string>
+    <string name="select_channel">Select Channel</string>
+    <string name="add_keyword">Add Keyword</string>
+    <string name="edit_keyword">Edit Keyword</string>
+    <string name="keyword_placeholder">Keyword (leave blank for all)</string>
+    
+    <!-- Channel Management -->
+    <string name="channel_title">Channel Management</string>
+    <string name="channel_name">Channel Name</string>
+    <string name="channel_type">Channel Type</string>
+    <string name="webhook_url">Webhook URL</string>
+    <string name="add_channel">Add Channel</string>
+    <string name="edit_channel">Edit Channel</string>
+    <string name="channel_type_wechat">WeChat Work</string>
+    <string name="channel_type_dingtalk">DingTalk</string>
+    <string name="channel_type_feishu">Feishu</string>
+    <string name="channel_type_generic">Custom Webhook</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="show_receiver_phone">Show Receiver Phone</string>
+    <string name="show_sender_phone">Show Sender Phone</string>
+    <string name="highlight_verification_code">Highlight Verification Code</string>
+    <string name="battery_reminder">Battery Reminder</string>
+    <string name="low_battery_reminder">Low Battery Reminder</string>
+    <string name="high_battery_reminder">High Battery Reminder</string>
+    <string name="charging_reminder">Charging Reminder</string>
+    <string name="battery_threshold">Battery Threshold</string>
+    <string name="test_rule">Rule Test</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="revoke_consent">Revoke Consent</string>
+    <string name="export_config">Export Config</string>
+    <string name="import_config">Scan to Import</string>
+    <string name="import_from_gallery">Import from Gallery</string>
+    <string name="about">About</string>
+    
+    <!-- Logs -->
+    <string name="log_title">Forwarding Logs</string>
+    <string name="refresh">Refresh</string>
+    <string name="clear_log">Clear Logs</string>
+    <string name="log_cleared">Logs cleared</string>
+    <string name="no_logs">No logs</string>
+    
+    <!-- Dialogs -->
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_close">Close</string>
+    <string name="dialog_save">Save</string>
+    <string name="dialog_agree">Agree</string>
+    <string name="dialog_disagree">Disagree</string>
+    <string name="dialog_i_know">Got it</string>
+    <string name="dialog_go_settings">Go to Settings</string>
+    
+    <!-- Permission Explanation -->
+    <string name="permission_needed">Permissions Required</string>
+    <string name="permission_explanation">SMS Forwarder needs the following permissions to work properly:\n\n• SMS Permission: To receive and identify SMS content\n• Notification Permission: To display service status and reminders\n\nPlease enable these permissions in system settings.</string>
+    <string name="permission_later">Later</string>
+    
+    <!-- Boot Tip -->
+    <string name="boot_tip_title">Important Notice</string>
+    <string name="boot_tip_content">For auto-start on boot to work properly, you need to enable the app's auto-start permission in system settings.\n\nUsually found in: Settings → Apps → SMS Forwarder → Permission Management/Auto-start Management</string>
+    
+    <!-- QR Code -->
+    <string name="qr_code_title">Config QR Code</string>
+    <string name="qr_code_desc">Save screenshot to restore data after app reinstallation, or import to other devices</string>
+    
+    <!-- Toast Messages -->
+    <string name="please_add_channel">Please add a channel first</string>
+    <string name="please_select_channel">Please select a channel</string>
+    <string name="please_fill_channel_info">Please fill in channel name and Webhook URL</string>
+    <string name="invalid_webhook_url">Invalid Webhook URL format, please enter a valid http:// or https:// URL</string>
+    <string name="config_added">Config added</string>
+    <string name="channel_added">Channel added</string>
+    <string name="service_started">Service started</string>
+    <string name="service_stopped">Service stopped</string>
+    <string name="start_on_boot_enabled">Auto-start enabled</string>
+    <string name="start_on_boot_disabled">Auto-start disabled</string>
+    <string name="show_receiver_phone_enabled">Receiver phone display enabled</string>
+    <string name="show_receiver_phone_disabled">Receiver phone display disabled</string>
+    <string name="show_sender_phone_enabled">Sender phone display enabled</string>
+    <string name="show_sender_phone_disabled">Sender phone display disabled</string>
+    <string name="highlight_code_enabled">Verification code highlight enabled</string>
+    <string name="highlight_code_disabled">Verification code highlight disabled</string>
+    <string name="battery_reminder_enabled">Battery reminder enabled</string>
+    <string name="battery_reminder_disabled">Battery reminder disabled</string>
+    <string name="low_battery_reminder_enabled">Low battery reminder enabled</string>
+    <string name="low_battery_reminder_disabled">Low battery reminder disabled</string>
+    <string name="high_battery_reminder_enabled">High battery reminder enabled</string>
+    <string name="high_battery_reminder_disabled">High battery reminder disabled</string>
+    <string name="charging_reminder_enabled">Charging reminder enabled</string>
+    <string name="charging_reminder_disabled">Charging reminder disabled</string>
+    <string name="open_system_settings">Please open system settings manually</string>
+    <string name="notification_required">Please allow app notifications (notification settings will open)</string>
+    <string name="qr_code_not_recognized">Failed to recognize QR code in image</string>
+    
+    <!-- Log Messages -->
+    <string name="log_service_started">Service started (by user)</string>
+    <string name="log_service_stopped">Service stopped (by user)</string>
+    <string name="log_no_channels">No channels or keyword rules configured, forwarding skipped</string>
+    <string name="log_skip_duplicate">Skipped duplicate message</string>
+    <string name="log_forward_success">Forward successful - From: %s -> %s (Rule: %s)</string>
+    <string name="log_forward_failed">Forward failed - From: %s -> %s (Rule: %s) | Reason: %s</string>
+    <string name="log_retry_success">Retry forward successful -> %s</string>
+    <string name="log_retry_failed">Retry forward failed (max attempts) -> %s | Reason: %s</string>
+    <string name="log_timeout">Some forward tasks timed out (returned after waiting %ds)</string>
+    <string name="log_webhook_invalid">Channel %s webhook format invalid: %s</string>
+    
+    <!-- Battery Reminders -->
+    <string name="battery_low_reminder">Battery reminder: Low battery %d%%</string>
+    <string name="battery_high_reminder">Battery reminder: High battery %d%%</string>
+    <string name="battery_no_channels">Battery reminder: No channels configured, skipped</string>
+    <string name="battery_channel_not_found">Battery reminder: Specified channel not found, skipped</string>
+    <string name="battery_reminder_success">Battery reminder sent successfully -> %s</string>
+    <string name="battery_reminder_failed">Battery reminder failed -> %s: HTTP %d %s</string>
+    <string name="charging_start">Charging reminder: Started %s, battery %d%%</string>
+    <string name="charging_end">Charging reminder: Charging ended, battery %d%%</string>
+    
+    <!-- Privacy Policy -->
+    <string name="privacy_title">Privacy Policy</string>
+    <string name="privacy_last_update">Last Updated: July 22, 2026</string>
+    <string name="privacy_overview">Overview</string>
+    <string name="privacy_core_principles">Core Principles</string>
+    <string name="privacy_info_collection">Information Collection & Use</string>
+    <string name="privacy_permissions">Permission Explanation</string>
+    <string name="privacy_data_storage">Data Storage</string>
+    <string name="privacy_your_rights">Your Rights</string>
+    <string name="privacy_third_party">Third Party Services</string>
+    <string name="privacy_updates">Policy Updates</string>
+    <string name="privacy_contact">Contact Us</string>
+    <string name="privacy_overview_text">SMS Forwarder (referred to as "we") takes your privacy very seriously. This privacy policy explains how we collect, use, store, and protect your personal information. By using our app, you agree to the practices described in this policy.</string>
+    <string name="privacy_app_name">App Name: SMS Forwarder</string>
+    <string name="privacy_developer">Developer: Huahao Technology Co., Ltd.</string>
+    <string name="privacy_email">Contact Email: support@smsforwarder.cn</string>
+    <string name="privacy_website">Official Website: https://smsforwarder.cn/</string>
+    <string name="privacy_license">License: 鲁ICP备2026018166号-2A</string>
+    <string name="privacy_principle_no_upload">No Cloud: All data is processed locally on your device and will not be uploaded to our servers</string>
+    <string name="privacy_principle_no_collect">No Collection: We do not collect your personal information, SMS content, or other sensitive data</string>
+    <string name="privacy_principle_no_track">No Tracking: No analytics, statistics, or advertising SDKs are integrated</string>
+    <string name="privacy_principle_full_control">Full Control: All permissions and data are controlled by you</string>
+    <string name="privacy_sms_content">SMS Content (Sensitive Information)</string>
+    <string name="privacy_sms_purpose">Purpose: Only used locally on your device for keyword rule matching and forwarding</string>
+    <string name="privacy_sms_storage">Storage: Not saved to any server, only processed temporarily during forwarding</string>
+    <string name="privacy_sms_important">Important: The only time SMS content is sent is when you actively configure a Webhook forwarding target (such as WeChat Work, DingTalk, Feishu, or custom Webhook). The app sends SMS directly to your specified target without passing through our servers.</string>
+    <string name="privacy_config">Configuration Information</string>
+    <string name="privacy_config_text">Your configured forwarding channels, keyword rules, and other settings are stored locally on your device and will not be uploaded.</string>
+    <string name="privacy_logs">Forwarding Logs</string>
+    <string name="privacy_logs_text">The app records forwarding history locally (up to 200 entries) for your review and debugging. These logs are stored only on your device.</string>
+    <string name="privacy_permission_sms">Receive SMS: Listens for incoming SMS on your device for forwarding</string>
+    <string name="privacy_permission_notification">Notification: Displays foreground service notifications to show service status</string>
+    <string name="privacy_permission_phone">Read Phone State: Identifies SIM card information and retrieves device phone number (optional)</string>
+    <string name="privacy_permission_network">Network: Only used for forwarding to configured Webhooks</string>
+    <string name="privacy_permission_foreground">Foreground Service: Keeps the app running stably in the background</string>
+    <string name="privacy_permission_boot">Auto-start on Boot: Automatically starts forwarding service after device boot (optional)</string>
+    <string name="privacy_permission_battery">Ignore Battery Optimization: Prevents the system from killing background services (optional)</string>
+    <string name="privacy_permission_network_state">Access Network State: Detects network connection status</string>
+    <string name="privacy_permission_camera">Camera: Used for scanning QR codes to import config (optional)</string>
+    <string name="privacy_permission_note">All permissions require your active authorization and can be revoked at any time in system settings.</string>
+    <string name="privacy_local_storage">Local Storage</string>
+    <string name="privacy_local_text">All data is stored in your device's private directory, including:</string>
+    <string name="privacy_local_channels">Forwarding channels and keyword configurations</string>
+    <string name="privacy_local_logs">Forwarding history logs</string>
+    <string name="privacy_local_settings">App settings</string>
+    <string name="privacy_server_storage">Server Storage</string>
+    <string name="privacy_server_text">We have no servers storing your data! The app is a purely local tool. We do not collect, store, or upload any user data.</string>
+    <string name="privacy_right_view">View Data: View all forwarding logs in the app</string>
+    <string name="privacy_right_delete">Delete Data: Clear logs in the app or uninstall to delete all data</string>
+    <string name="privacy_right_control">Control Permissions: Grant or revoke permissions anytime in system settings</string>
+    <string name="privacy_right_revoke">Revoke Consent: Revoke privacy policy consent in app settings</string>
+    <string name="privacy_third_party_text">About Forwarding Targets: If you configure a Webhook or other third-party service as a forwarding target, SMS content will be sent to that third party. Please choose forwarding targets carefully and ensure you understand their privacy policies. We are not responsible for third-party data processing.</string>
+    <string name="privacy_third_party_sdk">Third Party SDKs</string>
+    <string name="privacy_third_party_sdk_text">No third-party SDKs are integrated in the current version (including analytics, advertising, crash analysis, etc.).</string>
+    <string name="privacy_updates_text">We may update this privacy policy from time to time. For major changes, we will notify you through in-app notifications or other means. We recommend reviewing this policy regularly for the latest information.</string>
+    <string name="privacy_contact_text">If you have any questions or suggestions about this privacy policy, please contact us at:</string>
+    
+    <!-- Settings - Battery Reminder -->
+    <string name="battery_reminder_section">Battery Reminder</string>
+    <string name="enable_battery_reminder">Enable Battery Reminder</string>
+    <string name="enable_battery_reminder_desc">Send notification reminders when battery changes</string>
+    <string name="low_battery_reminder_title">Low Battery Reminder</string>
+    <string name="low_battery_reminder_desc">Remind when battery is below threshold</string>
+    <string name="low_battery_threshold_title">Low Battery Threshold</string>
+    <string name="low_battery_threshold_desc">Remind when battery is below this threshold</string>
+    <string name="high_battery_reminder_title">High Battery Reminder</string>
+    <string name="high_battery_reminder_desc">Remind when battery is above threshold</string>
+    <string name="high_battery_threshold_title">High Battery Threshold</string>
+    <string name="high_battery_threshold_desc">Remind when battery is above this threshold</string>
+    <string name="charging_reminder_title">Charging Reminder</string>
+    <string name="charging_reminder_desc">Send reminders when device starts or stops charging</string>
+    <string name="reminder_channel">Reminder Channel</string>
+    <string name="reminder_channel_desc">Select channel for battery reminders, send to all if not selected</string>
+    <string name="all_channels">All Channels</string>
+    <string name="unknown_channel">Unknown Channel</string>
+    
+    <!-- Settings - Message Format -->
+    <string name="message_format">Message Format</string>
+    <string name="show_receiver_phone_desc">Show receiver phone number when forwarding</string>
+    <string name="show_sender_phone_desc">Show sender phone number when forwarding</string>
+    <string name="highlight_code_desc">Auto-detect and highlight verification codes</string>
+    
+    <!-- Settings - Tools -->
+    <string name="tools">Tools</string>
+    <string name="test_rule">Rule Test</string>
+    
+    <!-- Settings - Permission Management -->
+    <string name="permission_management">Permission Management</string>
+    <string name="permission_sms_title">SMS Permission</string>
+    <string name="permission_sms_desc">Receive and identify SMS content</string>
+    <string name="permission_notification_title">Notification Permission</string>
+    <string name="permission_notification_desc">Display service status and reminders</string>
+    <string name="permission_phone_title">Read Phone State</string>
+    <string name="permission_phone_desc">Identify SIM card info for dual-SIM phones (optional)</string>
+    <string name="permission_battery_title">Ignore Battery Optimization</string>
+    <string name="permission_battery_desc">Prevent system from killing background service (optional)</string>
+    
+    <!-- Settings - Privacy Settings -->
+    <string name="privacy_settings">Privacy Settings</string>
+    
+    <!-- Settings - Dialogs -->
+    <string name="select_reminder_channel">Select Reminder Channel</string>
+    <string name="select_reminder_channel_desc">Select channel for battery reminders, select "All Channels" to send to all configured channels</string>
+    <string name="select_import_method">Select Import Method</string>
+    
+    <!-- Logs Page -->
+    <string name="log_count">%d records</string>
+    <string name="refresh">Refresh</string>
+    <string name="clear">Clear</string>
+    
+    <!-- About Dialog -->
+    <string name="about_title">About</string>
+    <string name="about_version">Version %s</string>
+    <string name="about_developer">Developer: Huahao Technology Co., Ltd.</string>
+    <string name="about_email">support@smsforwarder.cn</string>
+    <string name="about_website">Website</string>
+    <string name="about_description">Lightweight, stable, open-source Android SMS forwarding app. Supports WeChat Work, DingTalk, Feishu, custom Webhook and more. Features keyword filtering, verification code extraction, and device number identification.</string>
+    <string name="about_copyright">© 2026 Huahao Technology Co., Ltd.</string>
+    <string name="unknown_version">Unknown Version</string>
+    
+    <!-- Channel Type Labels -->
+    <string name="channel_type_wechat">WeChat Work</string>
+    <string name="channel_type_dingtalk">DingTalk</string>
+    <string name="channel_type_feishu">Feishu</string>
+    <string name="channel_type_generic">Custom Webhook</string>
+    
+    <!-- Battery Reminder Message Formats -->
+    <string name="battery_low_message">【Battery Alert】Current battery: %d%%, low battery, please charge</string>
+    <string name="battery_high_message">【Battery Alert】Current battery: %d%%, battery full</string>
+    <string name="charging_start_message">【Charging Alert】Device started %s, current battery: %d%%</string>
+    <string name="charging_end_message">【Charging Alert】Device stopped charging, current battery: %d%%</string>
+    <string name="battery_device_info">Device: %s</string>
+    
+    <!-- Charge Types -->
+    <string name="charge_type_ac">AC Charging</string>
+    <string name="charge_type_usb">USB Charging</string>
+    <string name="charge_type_wireless">Wireless Charging</string>
+    <string name="charge_type_unknown">Charging</string>
+    
+    <!-- Log Debug Messages -->
+    <string name="log_debug_notif">DEBUG: notifAllowed=%s ; %s</string>
+    <string name="log_debug_channel_failed">DEBUG: Channel check failed: %s</string>
+    <string name="log_start_foreground_failed">Error: startForeground failed: %s %s</string>
+    
+    <!-- Battery Related -->
+    <string name="battery_info_unavailable">Cannot get battery info</string>
+    
+    <!-- Notification Channel -->
+    <string name="notification_channel_name">SMS Forwarding Service</string>
+    
+    <!-- Permission Status -->
+    <string name="permission_granted">Granted</string>
+    <string name="permission_not_granted">Not Granted</string>
+    
+    <!-- Message Format -->
+    <string name="msg_code_label">Code: %s</string>
+    <string name="msg_receiver_label">Device: %s</string>
+    <string name="msg_sender_label">From: %s</string>
+    
+    <!-- SIM Card Info -->
+    <string name="custom_rom_tip">Custom ROMs like Xiaomi/HyperOS may not automatically detect phone number, please enter manually</string>
+    <string name="cannot_read_sim">Cannot read SIM card info</string>
+    <string name="set_sim_number">Set SIM%d Number</string>
+    <string name="manual_input_hint">If phone number cannot be detected automatically, you can enter it manually</string>
+    <string name="phone_number_example">e.g., 13800138000</string>
+    
+    <!-- Config Items -->
+    <string name="all_messages">All Messages</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="custom">Custom</string>
+    <string name="my_phone_number">My Phone Number</string>
+    <string name="enter_phone_number">Click edit button to manually enter your phone number</string>
+    <string name="need_phone_permission">Phone permission required to automatically get your phone number</string>
+    <string name="cannot_get_number">Cannot get number</string>
+    
+    <!-- SIM Card Info -->
+    <string name="sim_card_info">SIM Card Info</string>
+    <string name="click_to_enable_or_manual">Click to enable permission in settings, or enter number manually</string>
+    <string name="custom">Custom</string>
+    
+    <!-- Test Rule -->
+    <string name="test_rule_title">Test Forwarding Rule</string>
+    <string name="test_rule_hint">Enter SMS content to test matching</string>
+    <string name="enter_test_content">Enter test SMS content</string>
+    <string name="match_result">Match Result</string>
+    <string name="no_match">No matching rule</string>
+    <string name="please_enter_content">Please enter content to start test</string>
+    <string name="keyword_label">Keyword: %s</string>
+    
+    <!-- Network Errors -->
+    <string name="network_success">Success</string>
+    <string name="network_timeout">Connection timeout</string>
+    <string name="network_unknown_host">DNS resolution failed</string>
+    <string name="network_connection_refused">Connection refused</string>
+    <string name="network_io_error">Network error: %s</string>
+    <string name="network_unknown_error">Unknown error: %s</string>
+    <string name="network_cannot_read_response">Cannot read response</string>
+    <string name="network_no_response_body">No response body</string>
+    
+    <!-- Boot Start -->
+    <string name="boot_start_failed_notification">Boot start failed: Missing notification permission</string>
+    <string name="boot_start_failed_sms">Boot start failed: Missing SMS permission</string>
+    <string name="boot_start_success">Device booted: Foreground service started per settings</string>
+    <string name="boot_start_failed">Boot start service failed: %s</string>
+    
+    <!-- Network -->
+    <string name="network_recovered">Network recovered, triggering retry of failed messages</string>
+    
+    <!-- Scan -->
+    <string name="scan_camera_permission">Please grant camera permission to scan QR code</string>
+    <string name="scan_success">Config imported successfully</string>
+    <string name="scan_title">Scan QR Code</string>
+    <string name="scan_hint">Align QR code with scan frame</string>
+    <string name="scan_auto">System will auto-detect</string>
+    <string name="scan_back">Back</string>
+    
+    <!-- Log Messages -->
+    <string name="log_add_keyword">Added keyword: %s -> %s</string>
+    <string name="log_add_channel">Added channel: %s (%s)</string>
+    <string name="log_delete_channel">Deleted channel: %s</string>
+    <string name="log_edit_channel">Edited channel: %s</string>
+    <string name="log_edit_keyword">Edited keyword: %s -> %s</string>
+    
+    <!-- Channel Dialog -->
+    <string name="dialog_edit_channel">Edit Channel</string>
+    <string name="dialog_edit_config">Edit Keyword Config</string>
+    <string name="dialog_forward_channel">Forward Channel</string>
+    <string name="dialog_select_channel">Select Channel</string>
+    
+    <!-- Permission Dialog -->
+    <string name="dialog_permission_later">Later</string>
+    
+    <!-- Service Notification -->
+    <string name="service_notification_title">SMS Forwarder</string>
+    
+    <!-- Icon Descriptions -->
+    <string name="icon_about">About</string>
+</resources>

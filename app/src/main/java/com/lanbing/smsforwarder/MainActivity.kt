@@ -77,6 +77,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -118,7 +120,7 @@ class MainActivity : ComponentActivity() {
                             onConfigChanged?.invoke()
                         }
                     } ?: run {
-                        Toast.makeText(this, "未能识别图片中的二维码", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.qr_code_not_recognized), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -163,7 +165,7 @@ class MainActivity : ComponentActivity() {
                             }
                             startActivity(intent)
                         } catch (_: Exception) {
-                            Toast.makeText(this, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.open_system_settings), Toast.LENGTH_SHORT).show()
                         }
                     },
                     onRequestNotificationPermission = {
@@ -174,7 +176,7 @@ class MainActivity : ComponentActivity() {
                             }
                             startActivity(intent)
                         } catch (_: Exception) {
-                            Toast.makeText(this, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.open_system_settings), Toast.LENGTH_SHORT).show()
                         }
                     },
                     onStartService = { startServiceWithNotificationCheck() },
@@ -203,7 +205,7 @@ class MainActivity : ComponentActivity() {
         val pkg = packageName
         val notifEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (!notifEnabled) {
-            Toast.makeText(this, "请允许应用通知（将打开通知设置）", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.notification_required), Toast.LENGTH_LONG).show()
             val i = Intent().apply {
                 action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
                 putExtra(Settings.EXTRA_APP_PACKAGE, pkg)
@@ -304,29 +306,20 @@ fun SmsForwarderApp(
         }
     }
     
-    DisposableEffect(Unit) {
-        val logFile = File(context.filesDir, Constants.LOG_FILE_NAME)
-        @Suppress("DEPRECATION")
-        val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath, FileObserver.MODIFY or FileObserver.CREATE) {
-            override fun onEvent(event: Int, path: String?) {
-                if (path == Constants.LOG_FILE_NAME && event and (MODIFY or CREATE) != 0) {
-                    logs = LogStore.readAll(context)
-                }
-            }
-        }
-        observer.startWatching()
-        onDispose {
-            observer.stopWatching()
+    // 使用 Flow 监听日志变化，实现增量更新
+    LaunchedEffect(Unit) {
+        LogStore.observeLogs(context).collect { newLogs ->
+            logs = newLogs
         }
     }
     
     // 定义5个标签页
     val tabs = listOf(
-        "首页" to Icons.Default.Home,
-        "关键词" to Icons.Default.Label,
-        "通道" to Icons.Default.Cloud,
-        "设置" to Icons.Default.Settings,
-        "日志" to Icons.Default.History
+        context.getString(R.string.tab_home) to Icons.Default.Home,
+        context.getString(R.string.tab_keyword) to Icons.Default.Label,
+        context.getString(R.string.tab_channel) to Icons.Default.Cloud,
+        context.getString(R.string.tab_settings) to Icons.Default.Settings,
+        context.getString(R.string.tab_log) to Icons.Default.History
     )
 
     // Permission states (use key to trigger recomposition)
@@ -385,12 +378,12 @@ fun SmsForwarderApp(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                "短信转发助手",
+                                context.getString(R.string.service_notification_title),
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                if (isEnabled) "服务运行中" else "服务已停止",
+                                if (isEnabled) context.getString(R.string.app_subtitle) else context.getString(R.string.app_subtitle_stopped),
                                 fontSize = 12.sp,
                                 color = if (isEnabled) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -399,7 +392,7 @@ fun SmsForwarderApp(
                 },
                 actions = {
                     IconButton(onClick = { showAboutDialog = true }) {
-                        Icon(Icons.Outlined.Info, contentDescription = "关于")
+                        Icon(Icons.Outlined.Info, contentDescription = context.getString(R.string.icon_about))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -473,13 +466,13 @@ fun SmsForwarderApp(
                                 isEnabled = true
                                 prefs.edit().putBoolean(Constants.PREF_ENABLED, isEnabled).apply()
                                 onStartService()
-                                LogStore.append(context, "服务已启动（由用户开启）")
+                                LogStore.append(context, context.getString(R.string.log_service_started))
                                 context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                             } else {
                                 isEnabled = false
                                 prefs.edit().putBoolean(Constants.PREF_ENABLED, isEnabled).apply()
                                 onStopService()
-                                LogStore.append(context, "服务已停止（由用户关闭）")
+                                LogStore.append(context, context.getString(R.string.log_service_stopped))
                                 context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                             }
                         },
@@ -488,10 +481,10 @@ fun SmsForwarderApp(
                             startOnBoot = it
                             prefs.edit().putBoolean(Constants.PREF_START_ON_BOOT, startOnBoot).apply()
                             if (startOnBoot) {
-                                LogStore.append(context, "已开启开机启动")
+                                LogStore.append(context, context.getString(R.string.start_on_boot_enabled))
                                 showBootTipDialog = true
                             } else {
-                                LogStore.append(context, "已关闭开机启动")
+                                LogStore.append(context, context.getString(R.string.start_on_boot_disabled))
                             }
                         },
                         smsGranted = smsGranted,
@@ -519,19 +512,19 @@ fun SmsForwarderApp(
                         onConfigChannelDropdownExpandedChange = { configChannelDropdownExpanded = it },
                         onAddConfig = {
                             if (channels.isEmpty()) {
-                                Toast.makeText(context, "请先添加通道", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.please_add_channel), Toast.LENGTH_SHORT).show()
                                 return@KeywordTab
                             }
                             if (selectedChannelIdForNewCfg.isBlank()) {
-                                Toast.makeText(context, "请选择通道", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.please_select_channel), Toast.LENGTH_SHORT).show()
                                 return@KeywordTab
                             }
                             val newCfg = KeywordConfig(UUID.randomUUID().toString(), newKeywordInput.trim(), selectedChannelIdForNewCfg)
                             configs = configs + newCfg
                             saveConfigs(prefs, configs)
                             newKeywordInput = ""
-                            LogStore.append(context, "添加关键词: ${newCfg.keyword} -> ${channels.find { it.id == newCfg.channelId }?.name}")
-                            Toast.makeText(context, "配置已添加", Toast.LENGTH_SHORT).show()
+                            LogStore.append(context, String.format(context.getString(R.string.log_add_keyword), newCfg.keyword, channels.find { it.id == newCfg.channelId }?.name))
+                            Toast.makeText(context, context.getString(R.string.config_added), Toast.LENGTH_SHORT).show()
                         },
                         onDeleteConfig = { cfg ->
                             configs = configs.filterNot { it.id == cfg.id }
@@ -556,11 +549,11 @@ fun SmsForwarderApp(
                         onChannelTypeExpandedChange = { channelTypeExpanded = it },
                         onAddChannel = {
                             if (newChannelName.isBlank() || newChannelTarget.isBlank()) {
-                                Toast.makeText(context, "请填写通道名称和 Webhook 地址", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.please_fill_channel_info), Toast.LENGTH_SHORT).show()
                                 return@ChannelTab
                             }
                             if (!isValidWebhookUrl(newChannelTarget)) {
-                                Toast.makeText(context, "Webhook 地址格式无效，请输入有效的 http:// 或 https:// 地址", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.invalid_webhook_url), Toast.LENGTH_SHORT).show()
                                 return@ChannelTab
                             }
                             val newChannel = Channel(UUID.randomUUID().toString(), newChannelName.trim(), newChannelType, newChannelTarget.trim())
@@ -569,15 +562,15 @@ fun SmsForwarderApp(
                             selectedChannelIdForNewCfg = channels.firstOrNull()?.id ?: ""
                             newChannelName = ""
                             newChannelTarget = ""
-                            LogStore.append(context, "添加通道: ${newChannel.name} (${newChannel.type})")
-                            Toast.makeText(context, "通道已添加", Toast.LENGTH_SHORT).show()
+                            LogStore.append(context, String.format(context.getString(R.string.log_add_channel), newChannel.name, newChannel.type))
+                            Toast.makeText(context, context.getString(R.string.channel_added), Toast.LENGTH_SHORT).show()
                         },
                         onDeleteChannel = { ch ->
                             channels = channels.filterNot { it.id == ch.id }
                             saveChannels(prefs, channels)
                             configs = configs.filterNot { it.channelId == ch.id }
                             saveConfigs(prefs, configs)
-                            LogStore.append(context, "删除通道: ${ch.name}")
+                            LogStore.append(context, String.format(context.getString(R.string.log_delete_channel), ch.name))
                         },
                         onEditChannel = { ch ->
                             editingChannel = ch
@@ -592,43 +585,43 @@ fun SmsForwarderApp(
                         onShowReceiverPhoneChange = {
                             showReceiverPhone = it
                             prefs.edit().putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, showReceiverPhone).apply()
-                            if (showReceiverPhone) LogStore.append(context, "已开启显示本机号码") else LogStore.append(context, "已关闭显示本机号码")
+                            if (showReceiverPhone) LogStore.append(context, context.getString(R.string.show_receiver_phone_enabled)) else LogStore.append(context, context.getString(R.string.show_receiver_phone_disabled))
                         },
                         showSenderPhone = showSenderPhone,
                         onShowSenderPhoneChange = {
                             showSenderPhone = it
                             prefs.edit().putBoolean(Constants.PREF_SHOW_SENDER_PHONE, showSenderPhone).apply()
-                            if (showSenderPhone) LogStore.append(context, "已开启显示发送者号码") else LogStore.append(context, "已关闭显示发送者号码")
+                            if (showSenderPhone) LogStore.append(context, context.getString(R.string.show_sender_phone_enabled)) else LogStore.append(context, context.getString(R.string.show_sender_phone_disabled))
                         },
                         highlightVerificationCode = highlightVerificationCode,
                         onHighlightVerificationCodeChange = {
                             highlightVerificationCode = it
                             prefs.edit().putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, highlightVerificationCode).apply()
-                            if (highlightVerificationCode) LogStore.append(context, "已开启突出显示验证码") else LogStore.append(context, "已关闭突出显示验证码")
+                            if (highlightVerificationCode) LogStore.append(context, context.getString(R.string.highlight_code_enabled)) else LogStore.append(context, context.getString(R.string.highlight_code_disabled))
                         },
                         batteryReminderEnabled = batteryReminderEnabled,
                         onBatteryReminderEnabledChange = {
                             batteryReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, batteryReminderEnabled).apply()
-                            if (batteryReminderEnabled) LogStore.append(context, "已开启电量提醒") else LogStore.append(context, "已关闭电量提醒")
+                            if (batteryReminderEnabled) LogStore.append(context, context.getString(R.string.battery_reminder_enabled)) else LogStore.append(context, context.getString(R.string.battery_reminder_disabled))
                         },
                         lowBatteryReminderEnabled = lowBatteryReminderEnabled,
                         onLowBatteryReminderEnabledChange = {
                             lowBatteryReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, lowBatteryReminderEnabled).apply()
-                            if (lowBatteryReminderEnabled) LogStore.append(context, "已开启低电量提醒") else LogStore.append(context, "已关闭低电量提醒")
+                            if (lowBatteryReminderEnabled) LogStore.append(context, context.getString(R.string.low_battery_reminder_enabled)) else LogStore.append(context, context.getString(R.string.low_battery_reminder_disabled))
                         },
                         highBatteryReminderEnabled = highBatteryReminderEnabled,
                         onHighBatteryReminderEnabledChange = {
                             highBatteryReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, highBatteryReminderEnabled).apply()
-                            if (highBatteryReminderEnabled) LogStore.append(context, "已开启高电量提醒") else LogStore.append(context, "已关闭高电量提醒")
+                            if (highBatteryReminderEnabled) LogStore.append(context, context.getString(R.string.high_battery_reminder_enabled)) else LogStore.append(context, context.getString(R.string.high_battery_reminder_disabled))
                         },
                         chargingReminderEnabled = chargingReminderEnabled,
                         onChargingReminderEnabledChange = {
                             chargingReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, chargingReminderEnabled).apply()
-                            if (chargingReminderEnabled) LogStore.append(context, "已开启充电提醒") else LogStore.append(context, "已关闭充电提醒")
+                            if (chargingReminderEnabled) LogStore.append(context, context.getString(R.string.charging_reminder_enabled)) else LogStore.append(context, context.getString(R.string.charging_reminder_disabled))
                         },
                         batteryReminderChannelId = batteryReminderChannelId,
                         onBatteryReminderChannelIdChange = {
@@ -669,7 +662,7 @@ fun SmsForwarderApp(
                         onClear = {
                             LogStore.clear(context)
                             logs = emptyList()
-                            Toast.makeText(context, "日志已清除", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.log_cleared), Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -681,13 +674,13 @@ fun SmsForwarderApp(
     if (showChannelDialog && editingChannel != null) {
         ModernAlertDialog(
             onDismissRequest = { showChannelDialog = false; editingChannel = null },
-            title = "编辑通道",
+            title = context.getString(R.string.dialog_edit_channel),
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = editChannelName,
                         onValueChange = { editChannelName = it },
-                        label = { Text("通道名称") },
+                        label = { Text(context.getString(R.string.channel_name)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -700,7 +693,7 @@ fun SmsForwarderApp(
                             value = getChannelTypeLabel(editChannelType),
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("通道类型") },
+                            label = { Text(context.getString(R.string.channel_type)) },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(editTypeExpanded) },
                             shape = RoundedCornerShape(12.dp)
@@ -723,7 +716,7 @@ fun SmsForwarderApp(
                     OutlinedTextField(
                         value = editChannelTarget,
                         onValueChange = { editChannelTarget = it },
-                        label = { Text("Webhook 地址") },
+                        label = { Text(context.getString(R.string.webhook_url)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -736,15 +729,15 @@ fun SmsForwarderApp(
                         val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim())
                         channels = channels.map { if (it.id == ch.id) updated else it }
                         saveChannels(prefs, channels)
-                        LogStore.append(context, "编辑通道: ${updated.name}")
+                        LogStore.append(context, String.format(context.getString(R.string.log_edit_channel), updated.name))
                         showChannelDialog = false
                         editingChannel = null
                     },
                     shape = RoundedCornerShape(12.dp)
-                ) { Text("保存") }
+                ) { Text(context.getString(R.string.dialog_save)) }
             },
             dismissButton = {
-                TextButton(onClick = { showChannelDialog = false; editingChannel = null }) { Text("取消") }
+                TextButton(onClick = { showChannelDialog = false; editingChannel = null }) { Text(context.getString(R.string.dialog_cancel)) }
             }
         )
     }
@@ -753,13 +746,13 @@ fun SmsForwarderApp(
     if (showConfigDialog && editingConfig != null) {
         ModernAlertDialog(
             onDismissRequest = { showConfigDialog = false; editingConfig = null },
-            title = "编辑关键词配置",
+            title = context.getString(R.string.dialog_edit_config),
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = editConfigKeyword,
                         onValueChange = { editConfigKeyword = it },
-                        label = { Text("关键词（留空表示全部）") },
+                        label = { Text(context.getString(R.string.keyword_placeholder)) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -769,10 +762,10 @@ fun SmsForwarderApp(
                         onExpandedChange = { editCfgExpanded = !editCfgExpanded }
                     ) {
                         OutlinedTextField(
-                            value = channels.find { it.id == editConfigChannelId }?.name ?: "选择通道",
+                            value = channels.find { it.id == editConfigChannelId }?.name ?: context.getString(R.string.dialog_select_channel),
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("转发通道") },
+                            label = { Text(context.getString(R.string.dialog_forward_channel)) },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(editCfgExpanded) },
                             shape = RoundedCornerShape(12.dp)
@@ -799,21 +792,21 @@ fun SmsForwarderApp(
                     onClick = {
                         val cfg = editingConfig ?: return@Button
                         if (editConfigChannelId.isBlank()) {
-                            Toast.makeText(context, "请选择通道", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.please_select_channel), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         val updated = KeywordConfig(cfg.id, editConfigKeyword.trim(), editConfigChannelId)
                         configs = configs.map { if (it.id == cfg.id) updated else it }
                         saveConfigs(prefs, configs)
-                        LogStore.append(context, "编辑关键词: ${updated.keyword} -> ${channels.find { it.id == updated.channelId }?.name}")
+                        LogStore.append(context, String.format(context.getString(R.string.log_edit_keyword), updated.keyword, channels.find { it.id == updated.channelId }?.name))
                         showConfigDialog = false
                         editingConfig = null
                     },
                     shape = RoundedCornerShape(12.dp)
-                ) { Text("保存") }
+                ) { Text(context.getString(R.string.dialog_save)) }
             },
             dismissButton = {
-                TextButton(onClick = { showConfigDialog = false; editingConfig = null }) { Text("取消") }
+                TextButton(onClick = { showConfigDialog = false; editingConfig = null }) { Text(context.getString(R.string.dialog_cancel)) }
             }
         )
     }
@@ -839,17 +832,17 @@ fun SmsForwarderApp(
         val ctx = LocalContext.current
         ModernAlertDialog(
             onDismissRequest = { showBootTipDialog = false },
-            title = "重要提示",
+            title = context.getString(R.string.boot_tip_title),
             content = {
                 Text(
-                    text = "要让开机自启动正常工作，您还需要在系统设置中开启应用的自启动权限。\n\n通常在：设置 → 应用管理 → 短信转发助手 → 权限管理/自启动管理",
+                    text = context.getString(R.string.boot_tip_content),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
                 TextButton(onClick = { showBootTipDialog = false }) {
-                    Text("我知道了")
+                    Text(context.getString(R.string.dialog_i_know))
                 }
             },
             dismissButton = {
@@ -862,10 +855,10 @@ fun SmsForwarderApp(
                         }
                         ctx.startActivity(intent)
                     } catch (_: Exception) {
-                        Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, context.getString(R.string.open_system_settings), Toast.LENGTH_SHORT).show()
                     }
                 }) {
-                    Text("去设置")
+                    Text(context.getString(R.string.dialog_go_settings))
                 }
             }
         )
@@ -885,7 +878,7 @@ fun SmsForwarderApp(
                     }
                     ctx.startActivity(intent)
                 } catch (_: Exception) {
-                    Toast.makeText(ctx, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, context.getString(R.string.open_system_settings), Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -921,7 +914,7 @@ fun SmsForwarderApp(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        "配置二维码",
+                        context.getString(R.string.qr_code_title),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -944,7 +937,7 @@ fun SmsForwarderApp(
                             qrCodeBitmap?.let { bitmap ->
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "配置二维码",
+                                    contentDescription = context.getString(R.string.qr_code_title),
                                     modifier = Modifier.fillMaxSize().padding(12.dp)
                                 )
                             } ?: run {
@@ -956,7 +949,7 @@ fun SmsForwarderApp(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     Text(
-                        "截图保存，可在应用卸载后重新恢复数据，或导入到其他设备",
+                        context.getString(R.string.qr_code_desc),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -971,7 +964,7 @@ fun SmsForwarderApp(
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
-                        Text("关闭", fontSize = 16.sp)
+                        Text(context.getString(R.string.dialog_close), fontSize = 16.sp)
                     }
                 }
             }
@@ -1009,13 +1002,13 @@ fun PermissionExplanationDialog(
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    "需要权限",
+                    LocalContext.current.getString(R.string.permission_needed),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "短信转发助手需要以下权限才能正常工作：\n\n• 短信权限：用于接收并识别短信内容\n• 通知权限：用于显示服务运行状态和提醒\n\n请在系统设置中开启这些权限。",
+                    LocalContext.current.getString(R.string.permission_explanation),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1024,12 +1017,12 @@ fun PermissionExplanationDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismiss) { Text("稍后") }
+                    TextButton(onClick = onDismiss) { Text(LocalContext.current.getString(R.string.dialog_permission_later)) }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onGoToSettings,
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("去设置") }
+                    ) { Text(LocalContext.current.getString(R.string.dialog_go_settings)) }
                 }
             }
         }
@@ -1055,14 +1048,14 @@ fun PrivacyPolicyDialog(
             Column(modifier = Modifier.fillMaxHeight()) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        "隐私政策",
+                        stringResource(R.string.privacy_title),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "最后更新时间：2026年7月22日",
+                        stringResource(R.string.privacy_last_update),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1071,36 +1064,36 @@ fun PrivacyPolicyDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
                 
                 PolicyScrollableColumn(modifier = Modifier.weight(1f)) {
-                    PolicySection(title = "概述") {
+                    PolicySection(title = stringResource(R.string.privacy_overview)) {
                         Text(
-                            "短信转发助手（以下简称\"我们\"）非常重视用户的隐私保护。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的应用即表示您同意本政策中描述的做法。",
+                            stringResource(R.string.privacy_overview_text),
                             style = MaterialTheme.typography.bodyMedium,
                             lineHeight = 22.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        PolicyBullet("应用名称：短信转发助手")
-                        PolicyBullet("开发者：华昊科技有限公司")
-                        PolicyBullet("联系邮箱：support@smsforwarder.cn")
-                        PolicyBullet("官方网站：https://smsforwarder.cn/")
-                        PolicyBullet("备案号：鲁ICP备2026018166号-2A")
+                        PolicyBullet(stringResource(R.string.privacy_app_name))
+                        PolicyBullet(stringResource(R.string.privacy_developer))
+                        PolicyBullet(stringResource(R.string.privacy_email))
+                        PolicyBullet(stringResource(R.string.privacy_website))
+                        PolicyBullet(stringResource(R.string.privacy_license))
                     }
                     
-                    PolicySection(title = "核心原则") {
-                        PolicyBullet("不上云：所有数据都在您的手机本地处理，不会上传到我们的服务器")
-                        PolicyBullet("不收集：不会收集您的个人信息、短信内容等敏感数据")
-                        PolicyBullet("不追踪：不集成任何统计、分析或广告 SDK")
-                        PolicyBullet("完全可控：所有权限和数据都由您自己掌控")
+                    PolicySection(title = stringResource(R.string.privacy_core_principles)) {
+                        PolicyBullet(stringResource(R.string.privacy_principle_no_upload))
+                        PolicyBullet(stringResource(R.string.privacy_principle_no_collect))
+                        PolicyBullet(stringResource(R.string.privacy_principle_no_track))
+                        PolicyBullet(stringResource(R.string.privacy_principle_full_control))
                     }
                     
-                    PolicySection(title = "信息收集与使用") {
+                    PolicySection(title = stringResource(R.string.privacy_info_collection)) {
                         Text(
-                            "*短信内容（敏感信息）",
+                            stringResource(R.string.privacy_sms_content),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Text("用途：仅在您的手机本地用于匹配关键词规则和执行转发", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
-                        Text("存储：不会保存到任何服务器，仅在转发时临时处理", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_sms_purpose), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_sms_storage), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                         
                         Spacer(modifier = Modifier.height(12.dp))
                         
@@ -1120,7 +1113,7 @@ fun PrivacyPolicyDialog(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    "重要：唯一会发送短信内容的情况是您主动配置了 Webhook 转发目标（如企业微信、钉钉、飞书或自定义 Webhook），应用会将短信直接发送到您指定的目标，不会经过我们的服务器。",
+                                    stringResource(R.string.privacy_sms_important),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     lineHeight = 20.sp
@@ -1131,55 +1124,55 @@ fun PrivacyPolicyDialog(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            "配置信息",
+                            stringResource(R.string.privacy_config),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Text("您设置的转发通道、关键词规则等配置信息保存在您手机的本地存储中，不会上传。", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_config_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                         
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            "转发日志",
+                            stringResource(R.string.privacy_logs),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Text("应用会在本地记录转发历史（最多200条），方便您查看和调试，这些日志仅存储在您的手机上。", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_logs_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                     }
                     
-                    PolicySection(title = "权限说明") {
-                        PolicyBullet("接收短信权限：监听设备收到的短信，用于执行转发功能")
-                        PolicyBullet("通知权限：显示前台服务通知，让您知道服务正在运行")
-                        PolicyBullet("读取手机状态权限：用于识别双卡手机的 SIM 卡信息和获取本机号码（可选）")
-                        PolicyBullet("网络权限：仅用于转发到您配置的 Webhook")
-                        PolicyBullet("前台服务权限：保持应用在后台稳定运行")
-                        PolicyBullet("开机自启权限：让应用在开机后自动启动转发服务（可选）")
-                        PolicyBullet("忽略电池优化权限：防止系统杀死后台服务（可选）")
-                        PolicyBullet("访问网络状态权限：检测网络连接状态")
-                        PolicyBullet("相机权限：用于扫描二维码导入配置（可选）")
+                    PolicySection(title = stringResource(R.string.privacy_permissions)) {
+                        PolicyBullet(stringResource(R.string.privacy_permission_sms))
+                        PolicyBullet(stringResource(R.string.privacy_permission_notification))
+                        PolicyBullet(stringResource(R.string.privacy_permission_phone))
+                        PolicyBullet(stringResource(R.string.privacy_permission_network))
+                        PolicyBullet(stringResource(R.string.privacy_permission_foreground))
+                        PolicyBullet(stringResource(R.string.privacy_permission_boot))
+                        PolicyBullet(stringResource(R.string.privacy_permission_battery))
+                        PolicyBullet(stringResource(R.string.privacy_permission_network_state))
+                        PolicyBullet(stringResource(R.string.privacy_permission_camera))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("所有权限都需要您主动授权，您可以随时在系统设置中撤销。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.privacy_permission_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     
-                    PolicySection(title = "数据存储") {
+                    PolicySection(title = stringResource(R.string.privacy_data_storage)) {
                         Text(
-                            "本地存储",
+                            stringResource(R.string.privacy_local_storage),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Text("所有数据都存储在您手机的私有目录中，包括：", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_local_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                         Spacer(modifier = Modifier.height(4.dp))
-                        PolicyBullet("转发通道和关键词配置")
-                        PolicyBullet("转发历史日志")
-                        PolicyBullet("应用设置")
+                        PolicyBullet(stringResource(R.string.privacy_local_channels))
+                        PolicyBullet(stringResource(R.string.privacy_local_logs))
+                        PolicyBullet(stringResource(R.string.privacy_local_settings))
                         
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            "服务器存储",
+                            stringResource(R.string.privacy_server_storage),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
@@ -1200,7 +1193,7 @@ fun PrivacyPolicyDialog(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    "我们没有服务器存储您的数据！应用是纯本地运行的工具，我们不收集、不存储、不上传任何用户数据。",
+                                    stringResource(R.string.privacy_server_text),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     lineHeight = 20.sp
@@ -1209,14 +1202,14 @@ fun PrivacyPolicyDialog(
                         }
                     }
                     
-                    PolicySection(title = "您的权利") {
-                        PolicyBullet("查看数据：可以在应用内查看所有转发日志")
-                        PolicyBullet("删除数据：可以在应用内清空日志，或卸载应用删除所有数据")
-                        PolicyBullet("控制权限：可以在系统设置中随时授予或撤销权限")
-                        PolicyBullet("撤回同意：可以在应用设置中撤回隐私政策同意")
+                    PolicySection(title = stringResource(R.string.privacy_your_rights)) {
+                        PolicyBullet(stringResource(R.string.privacy_right_view))
+                        PolicyBullet(stringResource(R.string.privacy_right_delete))
+                        PolicyBullet(stringResource(R.string.privacy_right_control))
+                        PolicyBullet(stringResource(R.string.privacy_right_revoke))
                     }
                     
-                    PolicySection(title = "第三方服务") {
+                    PolicySection(title = stringResource(R.string.privacy_third_party)) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1233,7 +1226,7 @@ fun PrivacyPolicyDialog(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    "关于转发目标：如果您配置了 Webhook 或其他第三方服务作为转发目标，短信内容会发送到该第三方。请您谨慎选择转发目标，并确保了解其隐私政策。我们不对第三方的数据处理负责。",
+                                    stringResource(R.string.privacy_third_party_text),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     lineHeight = 20.sp
@@ -1244,25 +1237,25 @@ fun PrivacyPolicyDialog(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            "第三方 SDK",
+                            stringResource(R.string.privacy_third_party_sdk),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
-                        Text("当前版本未集成任何第三方 SDK（包括统计、广告、崩溃分析等）。", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                        Text(stringResource(R.string.privacy_third_party_sdk_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                     }
                     
-                    PolicySection(title = "政策更新") {
-                        Text("我们可能会不时更新本隐私政策。重大变更时，我们会通过应用内通知或其他方式告知您。建议您定期查看本政策以了解最新信息。", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                    PolicySection(title = stringResource(R.string.privacy_updates)) {
+                        Text(stringResource(R.string.privacy_updates_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                     }
                     
-                    PolicySection(title = "联系我们") {
-                        Text("如果您对本隐私政策有任何疑问或建议，请通过以下方式联系我们：", style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                    PolicySection(title = stringResource(R.string.privacy_contact)) {
+                        Text(stringResource(R.string.privacy_contact_text), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Mail, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("support@smsforwarder.cn", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(R.string.privacy_email), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -1276,7 +1269,7 @@ fun PrivacyPolicyDialog(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(vertical = 14.dp)
-                        ) { Text("关闭", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                        ) { Text(stringResource(R.string.dialog_close), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
                     } else {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1291,14 +1284,14 @@ fun PrivacyPolicyDialog(
                                     containerColor = Color(0xFF667EEA),
                                     contentColor = Color.White
                                 )
-                            ) { Text("同意", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                            ) { Text(stringResource(R.string.dialog_agree), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
                             OutlinedButton(
                                 onClick = onDisagree,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(vertical = 14.dp),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                            ) { Text("不同意", fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                            ) { Text(stringResource(R.string.dialog_disagree), fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
                         }
                     }
                 }
@@ -1436,12 +1429,12 @@ fun LogTab(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "转发日志",
+                            stringResource(R.string.log_title),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "${logs.size} 条记录",
+                            String.format(stringResource(R.string.log_count), logs.size),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1454,7 +1447,7 @@ fun LogTab(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                            Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         IconButton(
@@ -1464,7 +1457,7 @@ fun LogTab(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color(0xFFEE4444).copy(alpha = 0.1f))
                         ) {
-                            Icon(Icons.Filled.ClearAll, contentDescription = "清除", tint = Color(0xFFEE4444))
+                            Icon(Icons.Filled.ClearAll, contentDescription = stringResource(R.string.clear), tint = Color(0xFFEE4444))
                         }
                     }
                 }
@@ -1483,7 +1476,7 @@ fun LogTab(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                "暂无日志",
+                                stringResource(R.string.no_logs),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1548,7 +1541,7 @@ fun PermissionItem(
                 fontWeight = FontWeight.Medium
             )
             Text(
-                if (granted) "已授权" else "未授权",
+                if (granted) stringResource(R.string.permission_granted) else stringResource(R.string.permission_not_granted),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1556,7 +1549,7 @@ fun PermissionItem(
         if (granted) {
             Icon(
                 Icons.Filled.CheckCircle,
-                contentDescription = "已授权",
+                contentDescription = stringResource(R.string.permission_granted),
                 tint = Color(0xFF10B981)
             )
         } else {
@@ -1565,7 +1558,7 @@ fun PermissionItem(
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text("去设置")
+                Text(stringResource(R.string.dialog_go_settings))
                 Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
             }
         }
@@ -1611,7 +1604,7 @@ fun ConfigItem(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    if (keyword.isBlank()) "全部消息" else keyword,
+                    if (keyword.isBlank()) stringResource(R.string.all_messages) else keyword,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
@@ -1625,13 +1618,13 @@ fun ConfigItem(
                 onClick = onEdit,
                 modifier = Modifier.size(40.dp)
             ) {
-                Icon(Icons.Filled.Edit, contentDescription = "编辑")
+                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
             }
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(40.dp)
             ) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = Color(0xFFEE4444))
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), tint = Color(0xFFEE4444))
             }
         }
     }
@@ -1699,13 +1692,13 @@ fun ChannelItem(
                 onClick = onEdit,
                 modifier = Modifier.size(40.dp)
             ) {
-                Icon(Icons.Filled.Edit, contentDescription = "编辑")
+                Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit))
             }
             IconButton(
                 onClick = onDelete,
                 modifier = Modifier.size(40.dp)
             ) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = Color(0xFFEE4444))
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.delete), tint = Color(0xFFEE4444))
             }
         }
     }
@@ -1802,12 +1795,12 @@ fun TestRuleDialog(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            "测试转发规则",
+                            stringResource(R.string.test_rule_title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "输入短信内容测试匹配",
+                            stringResource(R.string.test_rule_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1831,7 +1824,7 @@ fun TestRuleDialog(
                             }
                         } else emptyList()
                     },
-                    label = { Text("输入测试短信内容") },
+                    label = { Text(stringResource(R.string.enter_test_content)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 4,
                     shape = RoundedCornerShape(16.dp)
@@ -1840,7 +1833,7 @@ fun TestRuleDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    "匹配结果",
+                    stringResource(R.string.match_result),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1869,7 +1862,7 @@ fun TestRuleDialog(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    if (testContent.isBlank()) "请输入内容开始测试" else "没有匹配的规则",
+                                    if (testContent.isBlank()) stringResource(R.string.please_enter_content) else stringResource(R.string.no_match),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
@@ -1908,7 +1901,7 @@ fun TestRuleDialog(
                                     Spacer(Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "关键词: ${if (cfg.keyword.isBlank()) "全部" else cfg.keyword}",
+                                            String.format(stringResource(R.string.keyword_label), if (cfg.keyword.isBlank()) stringResource(R.string.all_messages) else cfg.keyword),
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Medium
                                         )
@@ -1931,7 +1924,7 @@ fun TestRuleDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(vertical = 14.dp)
-                ) { Text("关闭", fontSize = 16.sp) }
+                ) { Text(stringResource(R.string.dialog_close), fontSize = 16.sp) }
             }
         }
     }
@@ -1945,7 +1938,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val versionName = try {
         packageManager.getPackageInfo(packageName, 0).versionName
     } catch (e: Exception) {
-        "未知版本"
+        stringResource(R.string.unknown_version)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1980,18 +1973,18 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    "短信转发助手",
+                    stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "版本 $versionName",
+                    String.format(stringResource(R.string.about_version), versionName),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    "轻量、稳定、开源的 Android 短信转发应用。支持企业微信、钉钉、飞书和自定义 Webhook 等多种转发渠道，支持关键词过滤、验证码提取、本机号码识别等功能。",
+                    stringResource(R.string.about_description),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2000,7 +1993,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "官方网站：https://smsforwarder.cn/",
+                    stringResource(R.string.privacy_website),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
@@ -2011,7 +2004,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "备案号：鲁ICP备2026018166号-2A",
+                    stringResource(R.string.privacy_license),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -2030,7 +2023,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(vertical = 14.dp)
-                ) { Text("关闭", fontSize = 16.sp) }
+                ) { Text(stringResource(R.string.dialog_close), fontSize = 16.sp) }
             }
         }
     }
@@ -2076,12 +2069,12 @@ fun SimCardInfoCard(permissionUpdateTrigger: Int) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "SIM 卡信息",
+                        stringResource(R.string.my_phone_number),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "点击编辑按钮手动输入本机号码",
+                        stringResource(R.string.enter_phone_number),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2103,7 +2096,7 @@ fun SimCardInfoCard(permissionUpdateTrigger: Int) {
                                 }
                                 context.startActivity(intent)
                             } catch (_: Exception) {
-                                Toast.makeText(context, "请手动打开系统设置", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, stringResource(R.string.open_system_settings), Toast.LENGTH_SHORT).show()
                             }
                         },
                     color = Color(0xFFFEF2F2).copy(alpha = 0.9f),
@@ -2121,14 +2114,14 @@ fun SimCardInfoCard(permissionUpdateTrigger: Int) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "需要电话权限才能自动获取本机号码",
+                                stringResource(R.string.need_phone_permission),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF991B1B)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "点击前往设置开启权限，或手动输入号码",
+                                stringResource(R.string.click_to_enable_or_manual),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFB91C1C)
                             )
@@ -2161,7 +2154,7 @@ fun SimCardInfoCard(permissionUpdateTrigger: Int) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "小米/澎湃OS等定制ROM通常无法自动获取本机号码，请手动输入",
+                        stringResource(R.string.custom_rom_tip),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF92400E)
                     )
@@ -2172,7 +2165,7 @@ fun SimCardInfoCard(permissionUpdateTrigger: Int) {
 
             if (simCards.isEmpty()) {
                 Text(
-                    "无法读取 SIM 卡信息",
+                    stringResource(R.string.cannot_read_sim),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2397,7 +2390,7 @@ fun SimCardItem(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        phoneNumber ?: "无法获取号码",
+                        phoneNumber ?: stringResource(R.string.cannot_get_number),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = if (phoneNumber != null) {
@@ -2413,7 +2406,7 @@ fun SimCardItem(
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                "自定义",
+                                stringResource(R.string.custom),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFF10B981),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -2437,7 +2430,7 @@ fun SimCardItem(
                 ) {
                     Icon(
                         Icons.Filled.Edit,
-                        contentDescription = "编辑",
+                        contentDescription = stringResource(R.string.edit),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -2448,7 +2441,7 @@ fun SimCardItem(
                     ) {
                         Icon(
                             Icons.Filled.Delete,
-                            contentDescription = "清除",
+                            contentDescription = stringResource(R.string.clear),
                             tint = Color(0xFFEE4444)
                         )
                     }
@@ -2481,19 +2474,19 @@ fun EditSimPhoneDialog(
     
     ModernAlertDialog(
         onDismissRequest = onDismiss,
-        title = "设置 SIM$slot 号码",
+        title = String.format(stringResource(R.string.set_sim_number), slot),
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "如果无法自动获取本机号码，可以手动输入",
+                    stringResource(R.string.manual_input_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = phoneNumber,
                     onValueChange = { phoneNumber = it },
-                    label = { Text("本机号码") },
-                    placeholder = { Text("例如：13800138000") },
+                    label = { Text(stringResource(R.string.my_phone_number)) },
+                    placeholder = { Text(stringResource(R.string.phone_number_example)) },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = {
                         Icon(Icons.Outlined.Phone, contentDescription = null)
@@ -2507,10 +2500,10 @@ fun EditSimPhoneDialog(
             Button(
                 onClick = { onSave(phoneNumber) },
                 shape = RoundedCornerShape(12.dp)
-            ) { Text("保存") }
+            ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
@@ -3696,7 +3689,7 @@ fun SettingsTab(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showChannelSelectionDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -3737,7 +3730,7 @@ fun SettingsTab(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showImportOptionsDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )

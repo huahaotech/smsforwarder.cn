@@ -37,7 +37,7 @@ class BootReceiver : BroadcastReceiver() {
                 // 检查通知权限
                 if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
                     Log.w(TAG, "通知权限未授予，无法在开机时启动服务")
-                    LogStore.append(context, "开机启动失败：缺少通知权限")
+                    LogStore.append(context, context.getString(R.string.boot_start_failed_notification))
                     return
                 }
 
@@ -50,7 +50,7 @@ class BootReceiver : BroadcastReceiver() {
 
                 if (!smsPermission) {
                     Log.w(TAG, "短信权限未授予，无法在开机时启动服务")
-                    LogStore.append(context, "开机启动失败：缺少短信权限")
+                    LogStore.append(context, context.getString(R.string.boot_start_failed_sms))
                     return
                 }
 
@@ -61,10 +61,10 @@ class BootReceiver : BroadcastReceiver() {
                     } else {
                         context.startService(svcIntent)
                     }
-                    LogStore.append(context, "设备开机：根据设置已启动前台服务")
+                    LogStore.append(context, context.getString(R.string.boot_start_success))
                 } catch (t: Throwable) {
                     Log.e(TAG, "开机启动服务失败", t)
-                    LogStore.append(context, "开机启动服务失败: ${t.javaClass.simpleName}")
+                    LogStore.append(context, String.format(context.getString(R.string.boot_start_failed), t.javaClass.simpleName))
                 }
             } else {
                 Log.d(TAG, "开机未启动服务: startOnBoot=$startOnBoot enabled=$enabled")
