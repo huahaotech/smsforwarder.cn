@@ -42,6 +42,7 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import org.json.JSONObject
+import java.nio.ByteBuffer
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -300,12 +301,26 @@ class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAn
                 val width = mediaImage.width
                 val height = mediaImage.height
                 
-                // 复制 Y 平面数据到字节数组
-                val yBuffer = yPlane.buffer
-                val yData = ByteArray(yBuffer.remaining())
-                yBuffer.get(yData)
+                // 获取 Y 平面的步长信息
+                val yRowStride = yPlane.rowStride
+                val yPixelStride = yPlane.pixelStride
                 
-                // 使用 PlanarYUVLuminanceSource 创建 BinaryBitmap（只使用 Y 通道）
+                // 复制 Y 平面数据到字节数组（处理行步长）
+                val yBuffer = yPlane.buffer
+                val yData = ByteArray(width * height)
+                var bufferIndex = 0
+                var dataIndex = 0
+                
+                for (row in 0 until height) {
+                    // 读取一行数据
+                    for (col in 0 until width) {
+                        yData[dataIndex++] = yBuffer.get(bufferIndex + col * yPixelStride)
+                    }
+                    // 移动到下一行
+                    bufferIndex += yRowStride
+                }
+                
+                // 使用 PlanarYUVLuminanceSource 创建 BinaryBitmap
                 val source = PlanarYUVLuminanceSource(
                     yData,
                     width,
