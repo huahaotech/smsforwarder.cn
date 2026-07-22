@@ -3614,7 +3614,7 @@ fun SecurityWarningCard() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Filled.ShieldAlert,
+                        Icons.Filled.Security,
                         contentDescription = null,
                         tint = Color(0xFFF59E0B),
                         modifier = Modifier.size(20.dp)
@@ -3639,7 +3639,7 @@ fun SecurityWarningCard() {
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        if (expanded) Icons.Filled.ChevronUp else Icons.Filled.ChevronDown,
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                         contentDescription = if (expanded) "收起" else "展开",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
