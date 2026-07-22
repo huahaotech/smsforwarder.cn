@@ -445,7 +445,7 @@ fun SmsForwarderApp(
                             }
                             val outlinedIcon = when (index) {
                                 0 -> Icons.Outlined.Home
-                                1 -> Icons.AutoMirrored.Outlined.Label
+                                1 -> Icons.Outlined.Label
                                 2 -> Icons.Outlined.Cloud
                                 3 -> Icons.Outlined.Settings
                                 4 -> Icons.Outlined.History
@@ -1880,7 +1880,7 @@ fun TestRuleDialog(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.AutoMirrored.Outlined.Rule,
+                                    Icons.Outlined.Rule,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -2773,7 +2773,7 @@ fun KeywordTab(
                             label = { Text("转发通道") },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             leadingIcon = {
-                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                                Icon(Icons.Outlined.Send, contentDescription = null)
                             },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(configChannelDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp)
@@ -2893,7 +2893,7 @@ fun ChannelTab(
                         label = { Text("通道名称") },
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = {
-                            Icon(Icons.AutoMirrored.Outlined.Label, contentDescription = null)
+                            Icon(Icons.Outlined.Label, contentDescription = null)
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -3029,6 +3029,7 @@ fun SettingsTab(
     onImportConfig: () -> Unit,
     onImportFromGallery: () -> Unit
 ) {
+    var showChannelSelectionDialog by remember { mutableStateOf(false) }
     var showImportOptionsDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -3513,7 +3514,7 @@ fun SettingsTab(
                     }
 
                     PermissionManagementItem(
-                        icon = Icons.AutoMirrored.Outlined.Message,
+                        icon = Icons.Outlined.Message,
                         title = "短信权限",
                         description = "用于接收并识别短信内容",
                         granted = smsGranted,
