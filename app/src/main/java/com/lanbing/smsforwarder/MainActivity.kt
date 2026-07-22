@@ -2530,6 +2530,11 @@ fun HomeTab(
                 }
             }
         }
+
+        // Security Warning Card
+        item {
+            SecurityWarningCard()
+        }
     }
 }
 
@@ -2778,6 +2783,33 @@ fun ChannelTab(
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    // Security warning
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFEF3C7).copy(alpha = 0.6f)
+                        )
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "请确保 Webhook 地址是您信任的来源，切勿使用陌生人提供的地址，以免验证码被窃取",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                    }
 
                     Button(
                         onClick = onAddChannel,
@@ -3205,11 +3237,32 @@ fun SettingsTab(
 
                     val ctx = LocalContext.current
 
+                    val smsGranted by remember(permissionUpdateTrigger) {
+                        derivedStateOf {
+                            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+                        }
+                    }
+                    val notifGranted by remember(permissionUpdateTrigger) {
+                        derivedStateOf {
+                            NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+                        }
+                    }
+                    val phoneGranted by remember(permissionUpdateTrigger) {
+                        derivedStateOf {
+                            ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+                        }
+                    }
+                    val batteryGranted by remember(permissionUpdateTrigger) {
+                        derivedStateOf {
+                            (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(ctx.packageName)
+                        }
+                    }
+
                     PermissionManagementItem(
                         icon = Icons.Outlined.Message,
                         title = "短信权限",
                         description = "用于接收并识别短信内容",
-                        granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
+                        granted = smsGranted,
                         onClick = {
                             try {
                                 val intent = Intent().apply {
@@ -3229,7 +3282,7 @@ fun SettingsTab(
                         icon = Icons.Outlined.Notifications,
                         title = "通知权限",
                         description = "用于显示服务运行状态和提醒",
-                        granted = NotificationManagerCompat.from(ctx).areNotificationsEnabled(),
+                        granted = notifGranted,
                         onClick = {
                             try {
                                 val intent = Intent().apply {
@@ -3253,7 +3306,7 @@ fun SettingsTab(
                         icon = Icons.Outlined.Phone,
                         title = "读取手机状态",
                         description = "用于识别双卡手机的SIM卡信息（可选）",
-                        granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED,
+                        granted = phoneGranted,
                         onClick = {
                             try {
                                 val intent = Intent().apply {
@@ -3273,7 +3326,7 @@ fun SettingsTab(
                         icon = Icons.Outlined.BatteryFull,
                         title = "忽略电池优化",
                         description = "防止系统杀死后台服务（可选）",
-                        granted = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(ctx.packageName),
+                        granted = batteryGranted,
                         onClick = {
                             try {
                                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -3290,6 +3343,143 @@ fun SettingsTab(
         }
 
         // 隐私设置
+        item {
+            ModernCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "安全设置",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Shield,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "本地存储",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "所有数据仅存储在您的手机本地",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF10B981).copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "零数据上传",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "不收集任何个人信息，不上传任何数据",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFF59E0B).copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF59E0B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "安全提醒",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "请谨慎设置转发通道，避免验证码泄露",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             ModernCard(
                 modifier = Modifier.fillMaxWidth()
@@ -3394,6 +3584,140 @@ fun PermissionManagementItem(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun SecurityWarningCard() {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFEF3C7).copy(alpha = 0.8f)
+        ),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF59E0B).copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.ShieldAlert,
+                        contentDescription = null,
+                        tint = Color(0xFFF59E0B),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "安全提醒",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF92400E)
+                    )
+                    Text(
+                        "谨防诈骗，保护您的验证码安全",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB45309)
+                    )
+                }
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        if (expanded) Icons.Filled.ChevronUp else Icons.Filled.ChevronDown,
+                        contentDescription = if (expanded) "收起" else "展开",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Divider(color = Color(0xFFF59E0B).copy(alpha = 0.3f))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    SecurityBullet(
+                        icon = Icons.Filled.Warning,
+                        title = "警惕诈骗",
+                        desc = "切勿将转发目标设置为陌生人提供的 Webhook 地址，以免验证码被窃取"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SecurityBullet(
+                        icon = Icons.Filled.Shield,
+                        title = "安全存储",
+                        desc = "所有配置仅存储在您的手机本地，不会上传到任何服务器"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SecurityBullet(
+                        icon = Icons.Filled.Lock,
+                        title = "权限最小化",
+                        desc = "仅授予必要的短信权限，不收集任何个人信息"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SecurityBullet(
+                        icon = Icons.Filled.Share,
+                        title = "谨慎分享",
+                        desc = "分享配置文件时请注意保护您的 Webhook 地址，避免泄露给他人"
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "如发现异常情况，请立即关闭服务并检查通道配置",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFDC2626),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SecurityBullet(
+    icon: ImageVector,
+    title: String,
+    desc: String
+) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = Color(0xFFF59E0B),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF92400E)
+            )
+            Text(
+                desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB45309),
+                lineHeight = 20.sp
             )
         }
     }
