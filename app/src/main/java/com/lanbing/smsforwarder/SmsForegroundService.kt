@@ -141,7 +141,7 @@ class SmsForegroundService : Service() {
                 }
 
                 // 充电状态变化监测
-                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, true)
+                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
                 if (chargingReminderEnabled) {
                     val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
                     val isCharging = plugged != 0

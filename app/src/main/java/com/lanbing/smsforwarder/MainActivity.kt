@@ -15,6 +15,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
@@ -22,6 +24,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.FileObserver
 import android.os.PowerManager
+import android.provider.MediaStore
 import android.provider.Settings
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
@@ -29,6 +32,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -91,6 +95,7 @@ class MainActivity : ComponentActivity() {
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var qrCodeScanLauncher: androidx.activity.result.ActivityResultLauncher<com.journeyapps.barcodescanner.ScanOptions>
+    private lateinit var imagePickerLauncher: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +114,21 @@ class MainActivity : ComponentActivity() {
                 importConfigFromJson(this, result.contents) {
                     onPermissionChanged?.invoke()
                     onConfigChanged?.invoke()
+                }
+            }
+        }
+
+        imagePickerLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let {
+                decodeQrCodeFromImage(this, uri) { content ->
+                    content?.let { jsonStr ->
+                        importConfigFromJson(this, jsonStr) {
+                            onPermissionChanged?.invoke()
+                            onConfigChanged?.invoke()
+                        }
+                    } ?: run {
+                        Toast.makeText(this, "未能识别图片中的二维码", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -292,7 +312,7 @@ fun SmsForwarderApp(
     var batteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
     var lowBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)) }
     var highBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)) }
-    var chargingReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, true)) }
+    var chargingReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)) }
     var batteryReminderChannelId by remember(configUpdateTrigger) { mutableStateOf(prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, null)) }
     var lowBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)) }
     var highBatteryThreshold by remember(configUpdateTrigger) { mutableStateOf(prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)) }
@@ -959,7 +979,7 @@ fun SmsForwarderApp(
                 shape = RoundedCornerShape(20.dp),
                 elevation = CardDefaults.cardElevation(8.dp)
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         "配置二维码",
                         style = MaterialTheme.typography.headlineSmall,
@@ -968,40 +988,40 @@ fun SmsForwarderApp(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "截图保存二维码，在另一台设备扫码即可导入配置",
+                        "截图保存，在另一台设备扫码导入",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)
-                            .background(Color.White)
-                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
-                            .padding(16.dp),
+                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        qrCodeBitmap?.let { bitmap ->
-                            Image(
-                                bitmap = bitmap.asImageBitmap(),
-                                contentDescription = "配置二维码",
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } ?: run {
-                            CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                        Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+                            qrCodeBitmap?.let { bitmap ->
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "配置二维码",
+                                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                                )
+                            } ?: run {
+                                CircularProgressIndicator(modifier = Modifier.size(48.dp).align(Alignment.Center))
+                            }
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
                     Button(
                         onClick = { showQrCodeDialog = false },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(vertical = 14.dp)
+                        contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         Text("关闭", fontSize = 16.sp)
                     }
@@ -3043,6 +3063,7 @@ fun SettingsTab(
     onImportConfig: () -> Unit
 ) {
     var showChannelSelectionDialog by remember { mutableStateOf(false) }
+    var showImportOptionsDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -3462,14 +3483,14 @@ fun SettingsTab(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
-                        onClick = onImportConfig,
+                        onClick = { showImportOptionsDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
                     ) {
                         Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("扫码导入", fontSize = 16.sp)
+                        Text("导入配置", fontSize = 16.sp)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -3728,6 +3749,47 @@ fun SettingsTab(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showChannelSelectionDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showImportOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportOptionsDialog = false },
+            title = { Text("选择导入方式") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = {
+                            showImportOptionsDialog = false
+                            onImportConfig()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 24.dp)
+                    ) {
+                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("扫码导入", fontSize = 16.sp)
+                    }
+                    TextButton(
+                        onClick = {
+                            showImportOptionsDialog = false
+                            imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 24.dp)
+                    ) {
+                        Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("从相册选取", fontSize = 16.sp)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showImportOptionsDialog = false }) {
                     Text("取消")
                 }
             }
@@ -4046,6 +4108,37 @@ private fun importConfigFromJson(
         e.printStackTrace()
         LogStore.append(context, "通过二维码导入配置失败: ${e.message}")
         Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun decodeQrCodeFromImage(context: Context, uri: Uri, callback: (String?) -> Unit) {
+    try {
+        val inputStream = context.contentResolver.openInputStream(uri)
+        val bitmap = BitmapFactory.decodeStream(inputStream)
+        inputStream?.close()
+        
+        if (bitmap == null) {
+            callback(null)
+            return
+        }
+        
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        
+        val binaryBitmap = com.google.zxing.BinaryBitmap(
+            com.google.zxing.common.HybridBinarizer(
+                com.google.zxing.RGBLuminanceSource(width, height, pixels)
+            )
+        )
+        
+        val reader = com.google.zxing.qrcode.QRCodeReader()
+        val result = reader.decode(binaryBitmap)
+        callback(result.text)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        callback(null)
     }
 }
 
