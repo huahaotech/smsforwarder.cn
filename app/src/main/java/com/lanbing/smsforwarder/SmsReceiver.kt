@@ -324,17 +324,25 @@ class SmsReceiver : BroadcastReceiver() {
                                         try { Thread.sleep(backoff) } catch (_: InterruptedException) { }
                                     }
                                     try {
-                                        success = sendToWebhook(ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
+                                        val result = sendToWebhook(ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
+                                        success = result.first
+                                        if (!success) {
+                                            if (attempt == Constants.MAX_RETRY_ATTEMPTS - 1) {
+                                                LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 原因: ${result.second}")
+                                            }
+                                        }
                                     } catch (e: Exception) {
-                                    Log.e(TAG, "发送尝试 ${attempt+1} 失败到 ${ch.target}", e)
-                                }
+                                        Log.e(TAG, "发送尝试 ${attempt+1} 失败到 ${ch.target}", e)
+                                        if (attempt == Constants.MAX_RETRY_ATTEMPTS - 1) {
+                                            LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 原因: ${e.message ?: e.javaClass.simpleName}")
+                                        }
+                                    }
                                     attempt++
                                     if (!success) backoff = Constants.INITIAL_RETRY_BACKOFF_MS * attempt
                                 }
                                 if (success) {
                                     LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                 } else {
-                                    LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                     // 添加到失败队列等待网络恢复时重试
                                     synchronized(failedMessageLock) {
                                         if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
@@ -468,7 +476,7 @@ class SmsReceiver : BroadcastReceiver() {
         return null
     }
 
-    internal fun sendToWebhook(webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Boolean {
+    internal fun sendToWebhook(webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Pair<Boolean, String> {
         val json = when (type) {
             ChannelType.FEISHU -> buildFeishuMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
             ChannelType.WECHAT -> buildWechatMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
@@ -482,8 +490,25 @@ class SmsReceiver : BroadcastReceiver() {
             .post(body)
             .build()
 
-        client.newCall(req).execute().use { resp ->
-            return resp.isSuccessful
+        return try {
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    Pair(true, "成功")
+                } else {
+                    val errorBody = try { resp.body?.string()?.take(500) } catch (_: Exception) { "无法读取响应" }
+                    Pair(false, "HTTP ${resp.code}: ${errorBody ?: "无响应体"}")
+                }
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            Pair(false, "连接超时")
+        } catch (e: java.net.UnknownHostException) {
+            Pair(false, "域名解析失败")
+        } catch (e: java.net.ConnectException) {
+            Pair(false, "连接被拒绝")
+        } catch (e: java.io.IOException) {
+            Pair(false, "网络错误: ${e.message ?: e.javaClass.simpleName}")
+        } catch (e: Exception) {
+            Pair(false, "未知错误: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 

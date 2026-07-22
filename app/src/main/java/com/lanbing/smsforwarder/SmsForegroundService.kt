@@ -184,12 +184,19 @@ class SmsForegroundService : Service() {
                                 if (response.isSuccessful) {
                                     LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
                                 } else {
-                                    LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${response.code}")
+                                    val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { "无法读取响应" }
+                                    LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: HTTP ${response.code} ${errorBody ?: ""}")
                                 }
                             }
+                        } catch (e: java.net.SocketTimeoutException) {
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 连接超时")
+                        } catch (e: java.net.UnknownHostException) {
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 域名解析失败")
+                        } catch (e: java.io.IOException) {
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 网络错误: ${e.message}")
                         } catch (t: Throwable) {
                             Log.w(TAG_BATTERY, "发送到 ${channel.name} 失败", t)
-                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}")
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${t.message ?: t.javaClass.simpleName}")
                         }
                     }
                 }
