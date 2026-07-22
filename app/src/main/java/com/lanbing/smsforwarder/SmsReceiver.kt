@@ -191,14 +191,14 @@ class SmsReceiver : BroadcastReceiver() {
                         try {
                             val receiver = SmsReceiver()
                             val channel = failed.toChannel()
-                            val success = receiver.sendToWebhook(failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
-                            if (success) {
+                            val result = receiver.sendToWebhook(failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
+                            if (result.first) {
                                 LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
                             } else {
                                 if (failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS) {
                                     failedMessages.add(failed.copy(retryCount = failed.retryCount + 1))
                                 } else {
-                                    LogStore.append(context, "重试转发失败（已达最大次数）-> ${failed.channelName}")
+                                    LogStore.append(context, "重试转发失败（已达最大次数）-> ${failed.channelName} | 原因: ${result.second}")
                                 }
                             }
                         } catch (e: Exception) {
