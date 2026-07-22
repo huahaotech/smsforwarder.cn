@@ -77,8 +77,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -266,6 +268,7 @@ fun SmsForwarderApp(
     // QR Code dialog
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isGeneratingQrCode by remember { mutableStateOf(false) }
 
     // Channel form state
     var newChannelName by remember { mutableStateOf("") }
@@ -648,8 +651,15 @@ fun SmsForwarderApp(
                         permissionUpdateTrigger = permissionUpdateTrigger,
                         onExportConfig = {
                             val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
-                            qrCodeBitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
-                            showQrCodeDialog = true
+                            isGeneratingQrCode = true
+                            scope.launch {
+                                val bitmap = withContext(Dispatchers.Default) {
+                                    QrCodeUtil.generateQrCode(jsonStr, 512)
+                                }
+                                qrCodeBitmap = bitmap
+                                isGeneratingQrCode = false
+                                showQrCodeDialog = true
+                            }
                         },
                         onImportConfig = onImportConfig,
                         onImportFromGallery = {

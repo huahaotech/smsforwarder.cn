@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
+import android.graphics.ImageFormat
+import android.graphics.YuvImage
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -36,11 +38,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -113,7 +118,7 @@ class ScanActivity : ComponentActivity() {
             val imageAnalyzer = ImageAnalysis.Builder()
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, BarcodeAnalyzer { barcode ->
+                    it.setAnalyzer(cameraExecutor, ZxingQrAnalyzer { barcode ->
                         if (parseAndImportConfig(barcode)) {
                             finish()
                         }
@@ -273,11 +278,14 @@ fun ScanScreen(
     }
 }
 
-class BarcodeAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAnalysis.Analyzer {
-    private val options = BarcodeScannerOptions.Builder()
-        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-        .build()
-    private val scanner = BarcodeScanning.getClient(options)
+class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAnalysis.Analyzer {
+    private val reader = MultiFormatReader().apply {
+        val hints = mapOf(
+            DecodeHintType.POSSIBLE_FORMATS to listOf(com.google.zxing.BarcodeFormat.QR_CODE),
+            DecodeHintType.CHARACTER_SET to "UTF-8"
+        )
+        setHints(hints)
+    }
     private var isScanned = false
 
     override fun analyze(imageProxy: ImageProxy) {
@@ -288,23 +296,42 @@ class BarcodeAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAn
 
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            scanner.process(image)
-                .addOnSuccessListener { barcodes ->
-                    for (barcode in barcodes) {
-                        val rawValue = barcode.rawValue
-                        if (rawValue != null) {
-                            isScanned = true
-                            onBarcodeDetected(rawValue)
-                        }
-                    }
+            try {
+                // 将 YUV 图像转换为 Bitmap 所需的格式
+                val width = mediaImage.width
+                val height = mediaImage.height
+                val yuvBytes = ByteArray(mediaImage.planes[0].buffer.capacity() +
+                    mediaImage.planes[1].buffer.capacity() +
+                    mediaImage.planes[2].buffer.capacity())
+                
+                mediaImage.planes[0].buffer.get(yuvBytes, 0, mediaImage.planes[0].buffer.capacity())
+                mediaImage.planes[1].buffer.get(yuvBytes, mediaImage.planes[0].buffer.capacity(), mediaImage.planes[1].buffer.capacity())
+                mediaImage.planes[2].buffer.get(yuvBytes, mediaImage.planes[0].buffer.capacity() + mediaImage.planes[1].buffer.capacity(), mediaImage.planes[2].buffer.capacity())
+
+                // 使用 PlanarYUVLuminanceSource 直接处理 YUV 数据
+                val source = PlanarYUVLuminanceSource(
+                    yuvBytes,
+                    width,
+                    height,
+                    0,
+                    0,
+                    width,
+                    height,
+                    false
+                )
+
+                val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+                val result = reader.decode(binaryBitmap)
+                
+                if (result.text != null) {
+                    isScanned = true
+                    onBarcodeDetected(result.text)
                 }
-                .addOnFailureListener { e ->
-                    Log.e("BarcodeAnalyzer", "Error scanning barcode", e)
-                }
-                .addOnCompleteListener {
-                    imageProxy.close()
-                }
+            } catch (e: Exception) {
+                // 解码失败是正常的，继续处理下一帧
+            } finally {
+                imageProxy.close()
+            }
         } else {
             imageProxy.close()
         }
