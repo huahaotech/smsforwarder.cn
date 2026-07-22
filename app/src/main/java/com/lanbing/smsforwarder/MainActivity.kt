@@ -682,7 +682,7 @@ fun SmsForwarderApp(
                         },
                         onImportConfig = onImportConfig,
                         onImportFromGallery = {
-                            imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            this@MainActivity.imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         }
                     )
                     4 -> LogTab(
