@@ -280,9 +280,6 @@ fun SmsForwarderApp(
     var channels by remember(configUpdateTrigger) { mutableStateOf(loadChannels(prefs)) }
     var configs by remember(configUpdateTrigger) { mutableStateOf(loadConfigs(prefs)) }
 
-    // Battery reminder channel selection dialog
-    var showChannelSelectionDialog by remember { mutableStateOf(false) }
-
     // QR Code dialog
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -328,7 +325,7 @@ fun SmsForwarderApp(
     
     DisposableEffect(Unit) {
         val logFile = File(context.filesDir, Constants.LOG_FILE_NAME)
-        val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath) {
+        val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath, FileObserver.MODIFY or FileObserver.CREATE) {
             override fun onEvent(event: Int, path: String?) {
                 if (path == Constants.LOG_FILE_NAME && event and (MODIFY or CREATE) != 0) {
                     logs = LogStore.readAll(context)
@@ -397,7 +394,7 @@ fun SmsForwarderApp(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Message,
+                                imageVector = Icons.AutoMirrored.Filled.Message,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
@@ -440,7 +437,7 @@ fun SmsForwarderApp(
                         icon = {
                             val filledIcon = when (index) {
                                 0 -> Icons.Filled.Home
-                                1 -> Icons.Filled.Label
+                                1 -> Icons.AutoMirrored.Filled.Label
                                 2 -> Icons.Filled.Cloud
                                 3 -> Icons.Filled.Settings
                                 4 -> Icons.Filled.History
@@ -448,7 +445,7 @@ fun SmsForwarderApp(
                             }
                             val outlinedIcon = when (index) {
                                 0 -> Icons.Outlined.Home
-                                1 -> Icons.Outlined.Label
+                                1 -> Icons.AutoMirrored.Outlined.Label
                                 2 -> Icons.Outlined.Cloud
                                 3 -> Icons.Outlined.Settings
                                 4 -> Icons.Outlined.History
@@ -674,7 +671,6 @@ fun SmsForwarderApp(
                         },
                         onShowPrivacyPolicy = { showPrivacyDialog = true },
                         permissionUpdateTrigger = permissionUpdateTrigger,
-                        startOnBoot = startOnBoot,
                         onExportConfig = {
                             val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
                             qrCodeBitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
@@ -1090,7 +1086,7 @@ fun PrivacyPolicyDialog(
                     )
                 }
                 
-                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
                 
                 PolicyScrollableColumn(modifier = Modifier.weight(1f)) {
                     PolicySection(title = "概述") {
@@ -1289,7 +1285,7 @@ fun PrivacyPolicyDialog(
                     }
                 }
                 
-                Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
                 
                 Column(modifier = Modifier.padding(16.dp)) {
                     if (isViewOnly) {
@@ -1624,7 +1620,7 @@ fun ConfigItem(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Filled.Rule,
+                    Icons.AutoMirrored.Filled.Rule,
                     contentDescription = null,
                     tint = Color(0xFF10B981),
                     modifier = Modifier.size(20.dp)
@@ -1884,7 +1880,7 @@ fun TestRuleDialog(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    Icons.Outlined.Rule,
+                                    Icons.AutoMirrored.Outlined.Rule,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -1994,7 +1990,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Filled.Message,
+                        Icons.AutoMirrored.Filled.Message,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(40.dp)
@@ -2735,7 +2731,7 @@ fun KeywordTab(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Rule,
+                                imageVector = Icons.AutoMirrored.Filled.Rule,
                                 contentDescription = null,
                                 tint = Color(0xFF10B981)
                             )
@@ -2777,7 +2773,7 @@ fun KeywordTab(
                             label = { Text("转发通道") },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             leadingIcon = {
-                                Icon(Icons.Outlined.Send, contentDescription = null)
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
                             },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(configChannelDropdownExpanded) },
                             shape = RoundedCornerShape(12.dp)
@@ -2897,7 +2893,7 @@ fun ChannelTab(
                         label = { Text("通道名称") },
                         modifier = Modifier.fillMaxWidth(),
                         leadingIcon = {
-                            Icon(Icons.Outlined.Label, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Outlined.Label, contentDescription = null)
                         },
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -3029,12 +3025,10 @@ fun SettingsTab(
     onRevokePrivacyConsent: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
     permissionUpdateTrigger: Int,
-    startOnBoot: Boolean,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
     onImportFromGallery: () -> Unit
 ) {
-    var showChannelSelectionDialog by remember { mutableStateOf(false) }
     var showImportOptionsDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -3292,7 +3286,7 @@ fun SettingsTab(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Filled.Send,
+                                    Icons.AutoMirrored.Filled.Send,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
@@ -3519,7 +3513,7 @@ fun SettingsTab(
                     }
 
                     PermissionManagementItem(
-                        icon = Icons.Outlined.Message,
+                        icon = Icons.AutoMirrored.Outlined.Message,
                         title = "短信权限",
                         description = "用于接收并识别短信内容",
                         granted = smsGranted,
@@ -4047,8 +4041,8 @@ internal fun importConfigFromJson(
         editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
-        val reminderChannelId = json.optString("batteryReminderChannelId", null)
-        if (reminderChannelId.isNullOrEmpty()) {
+        val reminderChannelId = json.optString("batteryReminderChannelId", "")
+        if (reminderChannelId.isEmpty()) {
             editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
         } else {
             editor.putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, reminderChannelId)
@@ -4057,15 +4051,15 @@ internal fun importConfigFromJson(
         editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
         editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
         
-        val sim1Phone = json.optString("customSim1Phone", null)
-        if (sim1Phone.isNullOrEmpty()) {
+        val sim1Phone = json.optString("customSim1Phone", "")
+        if (sim1Phone.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
         } else {
             editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1Phone)
         }
         
-        val sim2Phone = json.optString("customSim2Phone", null)
-        if (sim2Phone.isNullOrEmpty()) {
+        val sim2Phone = json.optString("customSim2Phone", "")
+        if (sim2Phone.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
         } else {
             editor.putString(Constants.PREF_CUSTOM_SIM2_PHONE, sim2Phone)
@@ -4165,8 +4159,8 @@ private fun importConfig(
         editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
-        val reminderChannelId = json.optString("batteryReminderChannelId", null)
-        if (reminderChannelId.isNullOrEmpty()) {
+        val reminderChannelId = json.optString("batteryReminderChannelId", "")
+        if (reminderChannelId.isEmpty()) {
             editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
         } else {
             editor.putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, reminderChannelId)
@@ -4175,14 +4169,14 @@ private fun importConfig(
         editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
         editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
         
-        val sim1 = json.optString("customSim1Phone", null)
-        val sim2 = json.optString("customSim2Phone", null)
-        if (sim1.isNullOrEmpty()) {
+        val sim1 = json.optString("customSim1Phone", "")
+        val sim2 = json.optString("customSim2Phone", "")
+        if (sim1.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
         } else {
             editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1)
         }
-        if (sim2.isNullOrEmpty()) {
+        if (sim2.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
         } else {
             editor.putString(Constants.PREF_CUSTOM_SIM2_PHONE, sim2)
