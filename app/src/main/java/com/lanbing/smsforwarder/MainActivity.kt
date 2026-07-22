@@ -3545,9 +3545,15 @@ private fun exportConfig(
         val file = java.io.File(downloadsDir, fileName)
         file.writeText(jsonStr, Charsets.UTF_8)
         
+        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/json"
-            putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file))
+            putExtra(Intent.EXTRA_STREAM, fileUri)
             putExtra(Intent.EXTRA_SUBJECT, "短信转发助手配置")
             putExtra(Intent.EXTRA_TEXT, "这是我的短信转发助手配置文件")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
