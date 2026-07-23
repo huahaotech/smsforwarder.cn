@@ -15,16 +15,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.FileObserver
 import android.os.PowerManager
-import android.provider.MediaStore
 import android.provider.Settings
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
@@ -38,7 +34,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -70,7 +65,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -1007,11 +1001,8 @@ fun SmsForwarderApp(
                     OutlinedButton(
                         onClick = {
                             try {
-                                val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
-                                val fileName = "sms_forwarder_config_${System.currentTimeMillis()}.json"
-                                val file = java.io.File(downloadsDir, fileName)
-                                file.writeText(exportJsonStr, Charsets.UTF_8)
-                                Toast.makeText(context, "已保存到: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                                saveConfigToDownloads(context, exportJsonStr)
+                                Toast.makeText(context, "已保存到系统下载目录", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
@@ -1023,7 +1014,7 @@ fun SmsForwarderApp(
                     ) {
                         Icon(Icons.Filled.Download, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("保存到本地", fontSize = 16.sp)
+                        Text("保存到下载", fontSize = 16.sp)
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -1512,7 +1503,6 @@ fun PrivacyPolicyDialog(
                         PolicyBullet("开机自启权限：让应用在开机后自动启动转发服务（可选）")
                         PolicyBullet("忽略电池优化权限：防止系统杀死后台服务（可选）")
                         PolicyBullet("访问网络状态权限：检测网络连接状态")
-                        PolicyBullet("相机权限：用于扫描二维码导入配置（可选）")
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("所有权限都需要您主动授权，您可以随时在系统设置中撤销。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -4258,18 +4248,8 @@ private fun exportConfig(
     val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
     
     try {
-        
-        val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-            ?: context.filesDir
         val fileName = "sms_forwarder_config_${System.currentTimeMillis()}.json"
-        val file = java.io.File(downloadsDir, fileName)
-        file.writeText(jsonStr, Charsets.UTF_8)
-        
-        val fileUri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
+        val fileUri = saveConfigToDownloads(context, jsonStr, fileName)
         
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/json"
@@ -4282,9 +4262,47 @@ private fun exportConfig(
         val chooser = Intent.createChooser(shareIntent, "分享配置文件")
         context.startActivity(chooser)
         
-        Toast.makeText(context, "配置已导出并准备分享", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "配置已保存到下载目录，可选择分享", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun saveConfigToDownloads(
+    context: Context,
+    jsonStr: String,
+    fileName: String = "sms_forwarder_config_${System.currentTimeMillis()}.json"
+): android.net.Uri {
+    val jsonBytes = jsonStr.toByteArray(Charsets.UTF_8)
+    
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+            put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+        }
+        
+        val collection = android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val uri = context.contentResolver.insert(collection, values)
+            ?: throw Exception("无法创建下载目录条目")
+        
+        context.contentResolver.openOutputStream(uri)?.use { os ->
+            os.write(jsonBytes)
+        } ?: throw Exception("无法写入文件")
+        
+        return uri
+    } else {
+        @Suppress("DEPRECATION")
+        val downloadsDir = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS))
+        if (!downloadsDir.exists()) downloadsDir.mkdirs()
+        val file = java.io.File(downloadsDir, fileName)
+        file.writeText(jsonStr, Charsets.UTF_8)
+        
+        return androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
     }
 }
 

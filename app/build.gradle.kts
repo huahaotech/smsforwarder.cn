@@ -137,6 +137,5 @@ dependencies {
     // Networking
     implementation("com.squareup.okhttp3:okhttp:$okhttpVersion")
 
-    // QR Code 生成与解码 (仅使用ZXing core，轻量方案)
-    implementation("com.google.zxing:core:3.5.2")
+
 }
