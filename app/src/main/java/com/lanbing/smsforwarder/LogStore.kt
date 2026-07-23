@@ -159,7 +159,7 @@ object LogStore {
         @Suppress("DEPRECATION")
         val observer = object : android.os.FileObserver(parentDir, FileObserver.MODIFY or FileObserver.CREATE) {
             override fun onEvent(event: Int, path: String?) {
-                if (path == Constants.LOG_FILE_NAME && event and (MODIFY or CREATE) != 0) {
+                if (path == Constants.LOG_FILE_NAME && (event and (MODIFY or CREATE)) != 0) {
                     try {
                         val newLines = readAll(context)
                         // 只发送新增的日志（新日志在文件开头）
