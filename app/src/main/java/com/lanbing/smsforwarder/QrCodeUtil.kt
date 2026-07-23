@@ -7,7 +7,6 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.EncodeHintType
-import com.google.zxing.LuminanceSource
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.PlanarYUVLuminanceSource
@@ -22,10 +21,7 @@ import java.util.zip.Inflater
 object QrCodeUtil {
 
     private const val TAG = "QrCodeUtil"
-    private const val MAX_QR_DATA_SIZE = 600
     private const val COMPRESSION_THRESHOLD = 200
-    private const val CHUNK_PREFIX = "P"
-    private const val PART_HEADER_PATTERN = Regex("""^P(\d+)/(\d+):(.*)""")
 
     private val reader by lazy {
         MultiFormatReader().apply {
@@ -37,40 +33,8 @@ object QrCodeUtil {
         }
     }
 
-    fun generateQrCodes(content: String, size: Int = 1024): List<Bitmap> {
+    fun generateQrCode(content: String, size: Int = 1024): Bitmap? {
         val data = encodeContent(content)
-        if (data.length <= MAX_QR_DATA_SIZE) {
-            val bitmap = generateSingleQr(data, size)
-            return if (bitmap != null) listOf(bitmap) else emptyList()
-        }
-        return splitAndGenerate(data, size)
-    }
-
-    private fun splitAndGenerate(data: String, size: Int): List<Bitmap> {
-        val parts = mutableListOf<String>()
-        var remaining = data
-        var index = 0
-        while (remaining.isNotEmpty()) {
-            index++
-            val chunkSize = MAX_QR_DATA_SIZE
-            val chunk = remaining.take(chunkSize)
-            remaining = remaining.drop(chunkSize)
-            val partHeader = "${CHUNK_PREFIX}$index/${0}:"
-            parts.add("$partHeader$chunk")
-        }
-        val total = parts.size
-        val fixedParts = parts.map { part ->
-            val match = PART_HEADER_PATTERN.find(part)
-            if (match != null) {
-                val idx = match.groupValues[1]
-                val body = match.groupValues[3]
-                "${CHUNK_PREFIX}$idx/$total:$body"
-            } else part
-        }
-        return fixedParts.mapNotNull { generateSingleQr(it, size) }
-    }
-
-    private fun generateSingleQr(data: String, size: Int): Bitmap? {
         return try {
             val hints = mutableMapOf<EncodeHintType, Any>().apply {
                 put(EncodeHintType.CHARACTER_SET, "UTF-8")
@@ -119,14 +83,7 @@ object QrCodeUtil {
         return output.toByteArray()
     }
 
-    data class DecodeResult(
-        val text: String?,
-        val isPart: Boolean,
-        val partIndex: Int,
-        val partTotal: Int
-    )
-
-    fun decodeFromBitmap(bitmap: Bitmap): DecodeResult {
+    fun decodeFromBitmap(bitmap: Bitmap): String? {
         val strategies = listOf(
             { decodeBitmapDirect(bitmap) },
             { decodeBitmapCenterCrop(bitmap) },
@@ -136,23 +93,23 @@ object QrCodeUtil {
             val result = strategy()
             if (result != null) return result
         }
-        return DecodeResult(null, false, 0, 0)
+        return null
     }
 
-    private fun decodeBitmapDirect(bitmap: Bitmap): DecodeResult? {
+    private fun decodeBitmapDirect(bitmap: Bitmap): String? {
         return try {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
             val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
-            parseDecodedText(result.text)
+            decodeContent(result.text)
         } catch (e: Exception) {
             null
         }
     }
 
-    private fun decodeBitmapCenterCrop(bitmap: Bitmap): DecodeResult? {
+    private fun decodeBitmapCenterCrop(bitmap: Bitmap): String? {
         return try {
             val cropW = (bitmap.width * 0.6).toInt()
             val cropH = (bitmap.height * 0.6).toInt()
@@ -165,7 +122,7 @@ object QrCodeUtil {
                 val source = RGBLuminanceSource(cropped.width, cropped.height, pixels)
                 val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
                 val result = reader.decode(binaryBitmap)
-                parseDecodedText(result.text)
+                decodeContent(result.text)
             } finally {
                 cropped.recycle()
             }
@@ -174,7 +131,7 @@ object QrCodeUtil {
         }
     }
 
-    private fun decodeBitmapInverted(bitmap: Bitmap): DecodeResult? {
+    private fun decodeBitmapInverted(bitmap: Bitmap): String? {
         return try {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -189,13 +146,13 @@ object QrCodeUtil {
             val source = RGBLuminanceSource(bitmap.width, bitmap.height, inverted)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
-            parseDecodedText(result.text)
+            decodeContent(result.text)
         } catch (e: Exception) {
             null
         }
     }
 
-    fun decodeFromYuv(data: ByteArray, width: Int, height: Int): DecodeResult {
+    fun decodeFromYuv(data: ByteArray, width: Int, height: Int): String? {
         val strategies = listOf(
             { decodeYuvFull(data, width, height) },
             { decodeYuvCenterCrop(data, width, height) },
@@ -205,21 +162,21 @@ object QrCodeUtil {
             val result = strategy()
             if (result != null) return result
         }
-        return DecodeResult(null, false, 0, 0)
+        return null
     }
 
-    private fun decodeYuvFull(data: ByteArray, width: Int, height: Int): DecodeResult? {
+    private fun decodeYuvFull(data: ByteArray, width: Int, height: Int): String? {
         return try {
             val source = PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
-            parseDecodedText(result.text)
+            decodeContent(result.text)
         } catch (e: Exception) {
             null
         }
     }
 
-    private fun decodeYuvCenterCrop(data: ByteArray, width: Int, height: Int): DecodeResult? {
+    private fun decodeYuvCenterCrop(data: ByteArray, width: Int, height: Int): String? {
         return try {
             val cropW = (width * 0.6).toInt()
             val cropH = (height * 0.6).toInt()
@@ -228,13 +185,13 @@ object QrCodeUtil {
             val source = PlanarYUVLuminanceSource(data, width, height, offsetX, offsetY, cropW, cropH, false)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
-            parseDecodedText(result.text)
+            decodeContent(result.text)
         } catch (e: Exception) {
             null
         }
     }
 
-    private fun decodeYuvDownsampled(data: ByteArray, width: Int, height: Int): DecodeResult? {
+    private fun decodeYuvDownsampled(data: ByteArray, width: Int, height: Int): String? {
         return try {
             val scale = 2
             val newWidth = width / scale
@@ -254,30 +211,10 @@ object QrCodeUtil {
             val source = PlanarYUVLuminanceSource(newData, newWidth, newHeight, 0, 0, newWidth, newHeight, false)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
-            parseDecodedText(result.text)
+            decodeContent(result.text)
         } catch (e: Exception) {
             null
         }
-    }
-
-    private fun parseDecodedText(raw: String): DecodeResult {
-        val partMatch = PART_HEADER_PATTERN.find(raw)
-        if (partMatch != null) {
-            val index = partMatch.groupValues[1].toInt()
-            val total = partMatch.groupValues[2].toInt()
-            val body = partMatch.groupValues[3]
-            return DecodeResult(body, isPart = true, partIndex = index, partTotal = total)
-        }
-        val decoded = decodeContent(raw)
-        return DecodeResult(decoded, isPart = false, partIndex = 0, partTotal = 0)
-    }
-
-    fun assembleParts(parts: Map<Int, String>, total: Int): String? {
-        if (parts.size < total) return null
-        val ordered = (1..total).mapNotNull { parts[it] }
-        if (ordered.size != total) return null
-        val combined = ordered.joinToString("")
-        return decodeContent(combined)
     }
 
     private fun decodeContent(encoded: String): String {
