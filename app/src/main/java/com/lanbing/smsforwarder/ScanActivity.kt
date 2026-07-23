@@ -36,13 +36,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.common.HybridBinarizer
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import org.json.JSONObject
-import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -60,7 +58,7 @@ class ScanActivity : ComponentActivity() {
             if (granted) {
                 startCamera()
             } else {
-                Toast.makeText(this, getString(R.string.scan_camera_permission), Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "请授予相机权限以扫描二维码", Toast.LENGTH_LONG).show()
                 finish()
             }
         }
@@ -113,10 +111,9 @@ class ScanActivity : ComponentActivity() {
                 }
 
             val imageAnalyzer = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, ZxingQrAnalyzer { barcode ->
+                    it.setAnalyzer(cameraExecutor, BarcodeAnalyzer { barcode ->
                         if (parseAndImportConfig(barcode)) {
                             finish()
                         }
@@ -144,7 +141,7 @@ class ScanActivity : ComponentActivity() {
         return try {
             JSONObject(jsonStr)
             importConfigFromJson(this, jsonStr) {
-                Toast.makeText(this, getString(R.string.scan_success), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
             }
             true
         } catch (e: Exception) {
@@ -184,13 +181,13 @@ fun ScanScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = LocalContext.current.getString(R.string.scan_title),
+                        text = "扫描二维码",
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = LocalContext.current.getString(R.string.scan_back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -257,7 +254,7 @@ fun ScanScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = LocalContext.current.getString(R.string.scan_hint),
+                        text = "将二维码对准扫描框",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
@@ -265,7 +262,7 @@ fun ScanScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = LocalContext.current.getString(R.string.scan_auto),
+                        text = "系统将自动识别",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
@@ -276,14 +273,11 @@ fun ScanScreen(
     }
 }
 
-class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAnalysis.Analyzer {
-    private val reader = MultiFormatReader().apply {
-        val hints = mapOf(
-            DecodeHintType.POSSIBLE_FORMATS to listOf(com.google.zxing.BarcodeFormat.QR_CODE),
-            DecodeHintType.CHARACTER_SET to "UTF-8"
-        )
-        setHints(hints)
-    }
+class BarcodeAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAnalysis.Analyzer {
+    private val options = BarcodeScannerOptions.Builder()
+        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+        .build()
+    private val scanner = BarcodeScanning.getClient(options)
     private var isScanned = false
 
     override fun analyze(imageProxy: ImageProxy) {
@@ -294,55 +288,23 @@ class ZxingQrAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAn
 
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
-            try {
-                // 获取 Y 平面数据
-                val yPlane = mediaImage.planes[0]
-                val width = mediaImage.width
-                val height = mediaImage.height
-                
-                // 获取 Y 平面的步长信息
-                val yRowStride = yPlane.rowStride
-                val yPixelStride = yPlane.pixelStride
-                
-                // 复制 Y 平面数据到字节数组（处理行步长）
-                val yBuffer = yPlane.buffer
-                val yData = ByteArray(width * height)
-                var bufferIndex = 0
-                var dataIndex = 0
-                
-                for (row in 0 until height) {
-                    // 读取一行数据
-                    for (col in 0 until width) {
-                        yData[dataIndex++] = yBuffer.get(bufferIndex + col * yPixelStride)
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            scanner.process(image)
+                .addOnSuccessListener { barcodes ->
+                    for (barcode in barcodes) {
+                        val rawValue = barcode.rawValue
+                        if (rawValue != null) {
+                            isScanned = true
+                            onBarcodeDetected(rawValue)
+                        }
                     }
-                    // 移动到下一行
-                    bufferIndex += yRowStride
                 }
-                
-                // 使用 PlanarYUVLuminanceSource 创建 BinaryBitmap
-                val source = PlanarYUVLuminanceSource(
-                    yData,
-                    width,
-                    height,
-                    0,
-                    0,
-                    width,
-                    height,
-                    false
-                )
-                
-                val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-                val result = reader.decode(binaryBitmap)
-                
-                if (result.text != null) {
-                    isScanned = true
-                    onBarcodeDetected(result.text)
+                .addOnFailureListener { e ->
+                    Log.e("BarcodeAnalyzer", "Error scanning barcode", e)
                 }
-            } catch (e: Exception) {
-                // 解码失败是正常的，继续处理下一帧
-            } finally {
-                imageProxy.close()
-            }
+                .addOnCompleteListener {
+                    imageProxy.close()
+                }
         } else {
             imageProxy.close()
         }

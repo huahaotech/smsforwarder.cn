@@ -35,6 +35,7 @@ object Constants {
     // 通知
     const val NOTIFICATION_UPDATE_THROTTLE_MS = 1000L
     const val NOTIFICATION_CHANNEL_ID = "sms_forwarder_channel"
+    const val NOTIFICATION_CHANNEL_NAME = "短信转发服务"
     const val NOTIFICATION_ID = 1423
 
     // 偏好设置键
@@ -69,5 +70,4 @@ object Constants {
     const val CALL_TIMEOUT_SECONDS = 20L
     const val CONNECT_TIMEOUT_SECONDS = 10L
     const val READ_TIMEOUT_SECONDS = 20L
-    const val WRITE_TIMEOUT_SECONDS = 20L
 }

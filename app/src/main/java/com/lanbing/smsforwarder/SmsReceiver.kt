@@ -31,7 +31,6 @@ import java.io.File
 import java.net.MalformedURLException
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -50,8 +49,11 @@ class SmsReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "SmsReceiver"
 
-        // 使用全局单例 OkHttpClient
-        val client: OkHttpClient get() = NetworkClient.instance
+        val client: OkHttpClient = OkHttpClient.Builder()
+            .callTimeout(Constants.CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .connectTimeout(Constants.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(Constants.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
 
         // 固定线程池避免线程爆炸
         private val executor = Executors.newFixedThreadPool(Constants.THREAD_POOL_SIZE)
@@ -61,8 +63,9 @@ class SmsReceiver : BroadcastReceiver() {
         private var lastCleanupTime = 0L
         private const val CLEANUP_INTERVAL_MS = 60000L // 1分钟清理一次
 
-        // 失败消息队列，等待网络恢复时重试（线程安全）
-        private val failedMessages = ConcurrentLinkedQueue<FailedMessage>()
+        // 失败消息队列，等待网络恢复时重试
+        private val failedMessages = mutableListOf<FailedMessage>()
+        private val failedMessageLock = Object()
 
         data class FailedMessage(
             val channelId: String,
@@ -138,28 +141,31 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         private fun saveFailedMessages(context: Context) {
-            try {
-                val file = failedMessagesFile(context)
-                val arr = JSONArray()
-                // 使用 toList() 获取快照，避免并发修改问题
-                failedMessages.toList().take(Constants.MAX_FAILED_MESSAGES).forEach { arr.put(it.toJSONObject()) }
-                file.writeText(arr.toString())
-            } catch (t: Throwable) {
-                Log.e(TAG, "保存失败消息失败", t)
+            synchronized(failedMessageLock) {
+                try {
+                    val file = failedMessagesFile(context)
+                    val arr = JSONArray()
+                    failedMessages.take(Constants.MAX_FAILED_MESSAGES).forEach { arr.put(it.toJSONObject()) }
+                    file.writeText(arr.toString())
+                } catch (t: Throwable) {
+            Log.e(TAG, "保存失败消息失败", t)
+        }
             }
         }
 
         private fun loadFailedMessages(context: Context) {
-            try {
-                val file = failedMessagesFile(context)
-                if (!file.exists()) return
-                val arr = JSONArray(file.readText())
-                failedMessages.clear()
-                for (i in 0 until arr.length()) {
-                    failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
-                }
-            } catch (t: Throwable) {
-                Log.e(TAG, "加载失败消息失败", t)
+            synchronized(failedMessageLock) {
+                try {
+                    val file = failedMessagesFile(context)
+                    if (!file.exists()) return
+                    val arr = JSONArray(file.readText())
+                    failedMessages.clear()
+                    for (i in 0 until arr.length()) {
+                        failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
+                    }
+                } catch (t: Throwable) {
+            Log.e(TAG, "加载失败消息失败", t)
+        }
             }
         }
 
@@ -174,33 +180,34 @@ class SmsReceiver : BroadcastReceiver() {
         @JvmStatic
         fun retryFailedMessages(context: Context) {
             loadFailedMessages(context)
-            if (failedMessages.isEmpty()) return
+            synchronized(failedMessageLock) {
+                if (failedMessages.isEmpty()) return
 
-            // 获取快照并清空队列
-            val toRetry = failedMessages.filter { it.retryCount < Constants.MAX_RETRY_ATTEMPTS }.toList()
-            failedMessages.clear()
+                val toRetry = failedMessages.filter { it.retryCount < Constants.MAX_RETRY_ATTEMPTS }
+                failedMessages.clear()
 
-            toRetry.forEach { failed ->
-                executor.execute {
-                    try {
-                        val receiver = SmsReceiver()
-                        val channel = failed.toChannel()
-                        val result = receiver.sendToWebhook(context, failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
-                        if (result.first) {
-                            LogStore.append(context, String.format(context.getString(R.string.log_retry_success), failed.channelName))
-                        } else {
-                            if (failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS) {
-                                failedMessages.add(failed.copy(retryCount = failed.retryCount + 1))
+                toRetry.forEach { failed ->
+                    executor.execute {
+                        try {
+                            val receiver = SmsReceiver()
+                            val channel = failed.toChannel()
+                            val result = receiver.sendToWebhook(failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
+                            if (result.first) {
+                                LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
                             } else {
-                                LogStore.append(context, String.format(context.getString(R.string.log_retry_failed), failed.channelName, result.second))
+                                if (failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS) {
+                                    failedMessages.add(failed.copy(retryCount = failed.retryCount + 1))
+                                } else {
+                                    LogStore.append(context, "重试转发失败（已达最大次数）-> ${failed.channelName} | 原因: ${result.second}")
+                                }
                             }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "重试失败", e)
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "重试失败", e)
                     }
                 }
+                saveFailedMessages(context)
             }
-            saveFailedMessages(context)
         }
     }
 
@@ -220,7 +227,7 @@ class SmsReceiver : BroadcastReceiver() {
         val configs = loadConfigs(prefs)
 
         if (channels.isEmpty() || configs.isEmpty()) {
-            LogStore.append(context, context.getString(R.string.log_no_channels))
+            LogStore.append(context, "未配置通道或关键词规则，已跳过转发")
             return
         }
 
@@ -308,7 +315,7 @@ class SmsReceiver : BroadcastReceiver() {
                     executor.execute {
                         try {
                             if (!isValidUrl(ch.target)) {
-                                LogStore.append(context, String.format(context.getString(R.string.log_webhook_invalid), ch.name, ch.target))
+                                LogStore.append(context, "通道 ${ch.name} webhook 格式无效: ${ch.target}")
                             } else {
                                 var attempt = 0
                                 var success = false
@@ -318,28 +325,30 @@ class SmsReceiver : BroadcastReceiver() {
                                         try { Thread.sleep(backoff) } catch (_: InterruptedException) { }
                                     }
                                     try {
-                                        val result = sendToWebhook(context, ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
+                                        val result = sendToWebhook(ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
                                         success = result.first
                                         if (!success) {
                                             if (attempt == Constants.MAX_RETRY_ATTEMPTS - 1) {
-                                                LogStore.append(context, String.format(context.getString(R.string.log_forward_failed), sender, ch.name, cfg.keyword, result.second))
+                                                LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 原因: ${result.second}")
                                             }
                                         }
                                     } catch (e: Exception) {
                                         Log.e(TAG, "发送尝试 ${attempt+1} 失败到 ${ch.target}", e)
                                         if (attempt == Constants.MAX_RETRY_ATTEMPTS - 1) {
-                                            LogStore.append(context, String.format(context.getString(R.string.log_forward_failed), sender, ch.name, cfg.keyword, e.message ?: e.javaClass.simpleName))
+                                            LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 原因: ${e.message ?: e.javaClass.simpleName}")
                                         }
                                     }
                                     attempt++
                                     if (!success) backoff = Constants.INITIAL_RETRY_BACKOFF_MS * attempt
                                 }
                                 if (success) {
-                                    LogStore.append(context, String.format(context.getString(R.string.log_forward_success), sender, ch.name, cfg.keyword))
+                                    LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                 } else {
-                                    // 添加到失败队列等待网络恢复时重试（ConcurrentLinkedQueue 线程安全）
-                                    if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
-                                        failedMessages.add(FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now))
+                                    // 添加到失败队列等待网络恢复时重试
+                                    synchronized(failedMessageLock) {
+                                        if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
+                                            failedMessages.add(FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now))
+                                        }
                                     }
                                 }
                             }
@@ -356,7 +365,7 @@ class SmsReceiver : BroadcastReceiver() {
                     false
                 }
                 if (!completed) {
-                    LogStore.append(context, String.format(context.getString(R.string.log_timeout), Constants.BROADCAST_TIMEOUT_SECONDS))
+                    LogStore.append(context, "部分转发任务超时（等待 ${Constants.BROADCAST_TIMEOUT_SECONDS}s 后返回）")
                 }
 
                 // 保存失败消息
@@ -467,7 +476,7 @@ class SmsReceiver : BroadcastReceiver() {
         return null
     }
 
-    internal fun sendToWebhook(context: Context, webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Pair<Boolean, String> {
+    internal fun sendToWebhook(webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Pair<Boolean, String> {
         val json = when (type) {
             ChannelType.FEISHU -> buildFeishuMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
             ChannelType.WECHAT -> buildWechatMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
@@ -484,22 +493,22 @@ class SmsReceiver : BroadcastReceiver() {
         return try {
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
-                    Pair(true, context.getString(R.string.network_success))
+                    Pair(true, "成功")
                 } else {
-                    val errorBody = try { resp.body?.string()?.take(500) } catch (_: Exception) { context.getString(R.string.network_cannot_read_response) }
-                    Pair(false, "HTTP ${resp.code}: ${errorBody ?: context.getString(R.string.network_no_response_body)}")
+                    val errorBody = try { resp.body?.string()?.take(500) } catch (_: Exception) { "无法读取响应" }
+                    Pair(false, "HTTP ${resp.code}: ${errorBody ?: "无响应体"}")
                 }
             }
         } catch (e: java.net.SocketTimeoutException) {
-            Pair(false, context.getString(R.string.network_timeout))
+            Pair(false, "连接超时")
         } catch (e: java.net.UnknownHostException) {
-            Pair(false, context.getString(R.string.network_unknown_host))
+            Pair(false, "域名解析失败")
         } catch (e: java.net.ConnectException) {
-            Pair(false, context.getString(R.string.network_connection_refused))
+            Pair(false, "连接被拒绝")
         } catch (e: java.io.IOException) {
-            Pair(false, String.format(context.getString(R.string.network_io_error), e.message ?: e.javaClass.simpleName))
+            Pair(false, "网络错误: ${e.message ?: e.javaClass.simpleName}")
         } catch (e: Exception) {
-            Pair(false, String.format(context.getString(R.string.network_unknown_error), e.message ?: e.javaClass.simpleName))
+            Pair(false, "未知错误: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 

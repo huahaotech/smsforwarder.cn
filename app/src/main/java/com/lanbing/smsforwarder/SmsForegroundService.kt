@@ -61,7 +61,7 @@ class SmsForegroundService : Service() {
                 val action = intent?.action
                 if (action == ACTION_STOP) {
                     stopSelf()
-                    LogStore.append(applicationContext, applicationContext.getString(R.string.log_service_stopped))
+                    LogStore.append(applicationContext, "收到通知停止服务请求，服务已停止")
                     return
                 }
                 updateNotification()
@@ -81,7 +81,7 @@ class SmsForegroundService : Service() {
                 val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
                 if (!batteryEnabled) {
-                    Log.d(TAG_BATTERY, context.getString(R.string.battery_no_channels))
+                    Log.d(TAG_BATTERY, "电量提醒未开启，已跳过")
                     return
                 }
 
@@ -93,7 +93,7 @@ class SmsForegroundService : Service() {
                 val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
                 val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
                 if (level == -1 || scale == -1) {
-                    Log.w(TAG_BATTERY, context.getString(R.string.battery_info_unavailable))
+                    Log.w(TAG_BATTERY, "无法获取电量信息")
                     return
                 }
 
@@ -107,13 +107,13 @@ class SmsForegroundService : Service() {
                 // 低电量提醒：电量低于阈值，且上次提醒的电量高于当前阈值（避免重复提醒）
                 if (lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
                     if (lastLowRemind == -1 || lastLowRemind > lowThreshold) {
-                        var message = String.format(context.getString(R.string.battery_low_message), batteryPercent)
+                        var message = "【电量提醒】当前电量：$batteryPercent%，电量较低，请及时充电"
                         if (phoneInfo.isNotEmpty()) {
-                            message += "\n" + String.format(context.getString(R.string.battery_device_info), phoneInfo)
+                            message += "\n设备：$phoneInfo"
                         }
                         sendBatteryReminder(context, message)
                         prefs.edit().putInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, batteryPercent).apply()
-                        LogStore.append(context, String.format(context.getString(R.string.battery_low_reminder), batteryPercent))
+                        LogStore.append(context, "电量提醒：低电量 $batteryPercent%")
                     }
                 } else {
                     // 电量高于阈值时，重置低电量提醒记录
@@ -125,13 +125,13 @@ class SmsForegroundService : Service() {
                 // 高电量提醒：电量高于阈值，且上次提醒的电量低于当前阈值（避免重复提醒）
                 if (highBatteryReminderEnabled && batteryPercent >= highThreshold) {
                     if (lastHighRemind == -1 || lastHighRemind < highThreshold) {
-                        var message = String.format(context.getString(R.string.battery_high_message), batteryPercent)
+                        var message = "【电量提醒】当前电量：$batteryPercent%，电量充足"
                         if (phoneInfo.isNotEmpty()) {
-                            message += "\n" + String.format(context.getString(R.string.battery_device_info), phoneInfo)
+                            message += "\n设备：$phoneInfo"
                         }
                         sendBatteryReminder(context, message)
                         prefs.edit().putInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, batteryPercent).apply()
-                        LogStore.append(context, String.format(context.getString(R.string.battery_high_reminder), batteryPercent))
+                        LogStore.append(context, "电量提醒：高电量 $batteryPercent%")
                     }
                 } else {
                     // 电量低于阈值时，重置高电量提醒记录
@@ -149,26 +149,26 @@ class SmsForegroundService : Service() {
                     
                     if (isCharging && !lastChargingState) {
                         val chargeType = when (plugged) {
-                            BatteryManager.BATTERY_PLUGGED_AC -> context.getString(R.string.charge_type_ac)
-                            BatteryManager.BATTERY_PLUGGED_USB -> context.getString(R.string.charge_type_usb)
-                            BatteryManager.BATTERY_PLUGGED_WIRELESS -> context.getString(R.string.charge_type_wireless)
-                            else -> context.getString(R.string.charge_type_unknown)
+                            BatteryManager.BATTERY_PLUGGED_AC -> "AC充电"
+                            BatteryManager.BATTERY_PLUGGED_USB -> "USB充电"
+                            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线充电"
+                            else -> "充电"
                         }
-                        var message = String.format(context.getString(R.string.charging_start_message), chargeType, batteryPercent)
+                        var message = "【充电提醒】设备已开始${chargeType}，当前电量：$batteryPercent%"
                         if (phoneInfo.isNotEmpty()) {
-                            message += "\n" + String.format(context.getString(R.string.battery_device_info), phoneInfo)
+                            message += "\n设备：$phoneInfo"
                         }
                         sendBatteryReminder(context, message)
                         prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, true).apply()
-                        LogStore.append(context, String.format(context.getString(R.string.charging_start), chargeType, batteryPercent))
+                        LogStore.append(context, "充电提醒：已开始${chargeType}，电量 $batteryPercent%")
                     } else if (!isCharging && lastChargingState) {
-                        var message = String.format(context.getString(R.string.charging_end_message), batteryPercent)
+                        var message = "【充电提醒】设备已结束充电，当前电量：$batteryPercent%"
                         if (phoneInfo.isNotEmpty()) {
-                            message += "\n" + String.format(context.getString(R.string.battery_device_info), phoneInfo)
+                            message += "\n设备：$phoneInfo"
                         }
                         sendBatteryReminder(context, message)
                         prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, false).apply()
-                        LogStore.append(context, String.format(context.getString(R.string.charging_end), batteryPercent))
+                        LogStore.append(context, "充电提醒：已结束充电，电量 $batteryPercent%")
                     }
                 }
             } catch (t: Throwable) {
@@ -177,8 +177,13 @@ class SmsForegroundService : Service() {
         }
     }
 
-    // 使用全局单例 OkHttpClient
-    private val httpClient get() = NetworkClient.instance
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
@@ -188,7 +193,7 @@ class SmsForegroundService : Service() {
                 val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 val channels = loadChannels(prefs)
                 if (channels.isEmpty()) {
-                    LogStore.append(context, context.getString(R.string.battery_no_channels))
+                    LogStore.append(context, "电量提醒：未配置通道，已跳过")
                     return@execute
                 }
 
@@ -200,7 +205,7 @@ class SmsForegroundService : Service() {
                 }
 
                 if (targetChannels.isEmpty()) {
-                    LogStore.append(context, context.getString(R.string.battery_channel_not_found))
+                    LogStore.append(context, "电量提醒：指定通道不存在，已跳过")
                     return@execute
                 }
 
@@ -221,21 +226,21 @@ class SmsForegroundService : Service() {
 
                             httpClient.newCall(request).execute().use { response ->
                                 if (response.isSuccessful) {
-                                    LogStore.append(context, String.format(context.getString(R.string.battery_reminder_success), channel.name))
+                                    LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
                                 } else {
-                                    val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { context.getString(R.string.log_webhook_invalid) }
-                                    LogStore.append(context, String.format(context.getString(R.string.battery_reminder_failed), channel.name, response.code, errorBody ?: ""))
+                                    val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { "无法读取响应" }
+                                    LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: HTTP ${response.code} ${errorBody ?: ""}")
                                 }
                             }
                         } catch (e: java.net.SocketTimeoutException) {
-                            LogStore.append(context, String.format(context.getString(R.string.battery_reminder_failed), channel.name, 0, context.getString(R.string.log_webhook_invalid)))
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 连接超时")
                         } catch (e: java.net.UnknownHostException) {
-                            LogStore.append(context, String.format(context.getString(R.string.battery_reminder_failed), channel.name, 0, e.message ?: "DNS failure"))
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 域名解析失败")
                         } catch (e: java.io.IOException) {
-                            LogStore.append(context, String.format(context.getString(R.string.battery_reminder_failed), channel.name, 0, "Network error: ${e.message}"))
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 网络错误: ${e.message}")
                         } catch (t: Throwable) {
                             Log.w(TAG_BATTERY, "发送到 ${channel.name} 失败", t)
-                            LogStore.append(context, String.format(context.getString(R.string.battery_reminder_failed), channel.name, 0, t.message ?: t.javaClass.simpleName))
+                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${t.message ?: t.javaClass.simpleName}")
                         }
                     }
                 }
@@ -388,7 +393,7 @@ class SmsForegroundService : Service() {
                     val importance = NotificationManager.IMPORTANCE_HIGH
                     val channel = NotificationChannel(
                         Constants.NOTIFICATION_CHANNEL_ID,
-                        getString(R.string.notification_channel_name),
+                        Constants.NOTIFICATION_CHANNEL_NAME,
                         importance
                     )
                     channel.setShowBadge(false)
@@ -407,7 +412,7 @@ class SmsForegroundService : Service() {
         // 检查通知权限
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
             Log.w(TAG, "通知权限未授予，无法启动前台服务")
-            LogStore.append(applicationContext, applicationContext.getString(R.string.notification_required))
+            LogStore.append(applicationContext, "错误：缺少通知权限，无法启动前台服务")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -418,8 +423,8 @@ class SmsForegroundService : Service() {
             Log.w(TAG, "构建通知失败，使用回退方案", t)
             // fallback: 直接使用编译时资源，确保 smallIcon 不会回退到系统占位
             NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL_ID)
-                .setContentTitle(getString(R.string.app_name))
-                .setContentText(getString(R.string.app_subtitle))
+                .setContentTitle("短信转发助手")
+                .setContentText("服务正在运行")
                 .setSmallIcon(R.drawable.ic_stat_notification)
                 .setOngoing(true)
                 .build()
@@ -439,7 +444,7 @@ class SmsForegroundService : Service() {
             }
         } catch (t: Throwable) {
             Log.w(TAG, "启动前台服务失败，正在停止服务", t)
-            LogStore.append(applicationContext, String.format(getString(R.string.log_start_foreground_failed), t.javaClass.simpleName, t.message))
+            LogStore.append(applicationContext, "错误: startForeground 失败: ${t.javaClass.simpleName} ${t.message}")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -449,9 +454,9 @@ class SmsForegroundService : Service() {
             val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.getNotificationChannel(Constants.NOTIFICATION_CHANNEL_ID) else null
             val chInfo = if (channel != null) "channel(${channel.id}): importance=${channel.importance} name=${channel.name}" else "channel:null"
             val notifAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
-            LogStore.append(applicationContext, String.format(getString(R.string.log_debug_notif), notifAllowed, chInfo))
+            LogStore.append(applicationContext, "DEBUG: notifAllowed=$notifAllowed ; $chInfo")
         } catch (t: Throwable) {
-            LogStore.append(applicationContext, String.format(getString(R.string.log_debug_channel_failed), t.message))
+            LogStore.append(applicationContext, "DEBUG: 检查 channel 失败: ${t.message}")
         }
 
         try {
@@ -491,11 +496,11 @@ class SmsForegroundService : Service() {
     private fun buildNotification(): Notification {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean(Constants.PREF_ENABLED, false)
-        val status = if (enabled) getString(R.string.app_subtitle) else getString(R.string.app_subtitle_stopped)
+        val status = if (enabled) "已启用" else "已禁用"
         val latest = LogStore.latest(this)
 
         val builder = NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("${getString(R.string.app_name)} - $status")
+            .setContentTitle("短信转发助手 - $status")
             .setContentText(latest)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setOngoing(true)
@@ -530,7 +535,7 @@ class SmsForegroundService : Service() {
 
         val stopIntent = Intent(ACTION_STOP).apply { `package` = packageName }
         val stopPending = PendingIntent.getBroadcast(this, 1, stopIntent, piFlags)
-        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.notification_stop), stopPending)
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "停止服务", stopPending)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
@@ -540,7 +545,7 @@ class SmsForegroundService : Service() {
                 `package` = packageName
             }
             val pi = PendingIntent.getActivity(this, 2, intent, piFlags)
-            builder.addAction(android.R.drawable.ic_menu_manage, getString(R.string.notification_settings), pi)
+            builder.addAction(android.R.drawable.ic_menu_manage, "通知设置", pi)
         } else {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = Uri.parse("package:$packageName")
@@ -548,7 +553,7 @@ class SmsForegroundService : Service() {
                 `package` = packageName
             }
             val pi = PendingIntent.getActivity(this, 3, intent, piFlags)
-            builder.addAction(android.R.drawable.ic_menu_manage, getString(R.string.notification_app_settings), pi)
+            builder.addAction(android.R.drawable.ic_menu_manage, "应用设置", pi)
         }
 
         return builder.build()

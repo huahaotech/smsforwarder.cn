@@ -11,11 +11,6 @@
 package com.lanbing.smsforwarder
 
 import android.content.Context
-import android.os.FileObserver
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.onStart
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -128,7 +123,7 @@ object LogStore {
     fun latest(context: Context): String {
         try {
             val file = logFile(context)
-            if (!file.exists()) return context.getString(R.string.no_logs)
+            if (!file.exists()) return "暂无日志"
             synchronized(lock) {
                 BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { br ->
                     var line: String?
@@ -142,51 +137,6 @@ object LogStore {
         } catch (t: Throwable) {
             t.printStackTrace()
         }
-        return context.getString(R.string.no_logs)
-    }
-
-    /**
-     * 监听日志文件变化，返回增量更新的 Flow
-     * 初始发射所有日志，之后只发射新增的日志条目
-     */
-    fun observeLogs(context: Context): Flow<List<String>> = callbackFlow {
-        val file = logFile(context)
-        val parentDir = file.parent ?: context.filesDir.absolutePath
-        
-        // 记录当前日志数量，用于增量更新
-        var lastLineCount = 0
-        
-        @Suppress("DEPRECATION")
-        val observer = object : android.os.FileObserver(parentDir, FileObserver.MODIFY or FileObserver.CREATE) {
-            override fun onEvent(event: Int, path: String?) {
-                if (path == Constants.LOG_FILE_NAME && (event and (MODIFY or CREATE)) != 0) {
-                    try {
-                        val newLines = readAll(context)
-                        // 只发送新增的日志（新日志在文件开头）
-                        if (newLines.size > lastLineCount) {
-                            val addedLines = newLines.subList(0, newLines.size - lastLineCount)
-                            trySend(addedLines)
-                        }
-                        lastLineCount = newLines.size
-                    } catch (_: Throwable) {
-                    }
-                }
-            }
-        }
-        
-        observer.startWatching()
-        
-        // 初始发射所有日志
-        val initialLogs = readAll(context)
-        lastLineCount = initialLogs.size
-        trySend(initialLogs)
-        
-        awaitClose {
-            observer.stopWatching()
-        }
-    }.onStart {
-        // 确保初始值被发送
-        val initialLogs = readAll(context)
-        emit(initialLogs)
+        return "暂无日志"
     }
 }
