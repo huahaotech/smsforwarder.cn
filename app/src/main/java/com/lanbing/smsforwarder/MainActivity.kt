@@ -610,7 +610,14 @@ fun SmsForwarderApp(
                         onBatteryReminderEnabledChange = {
                             batteryReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, batteryReminderEnabled).apply()
-                            if (batteryReminderEnabled) LogStore.append(context, "已开启电量提醒") else LogStore.append(context, "已关闭电量提醒")
+                            // 重置初始化标记，确保下次服务启动时正确初始化充电状态
+                            prefs.edit().remove("last_charging_state_initialized").apply()
+                            if (batteryReminderEnabled) {
+                                LogStore.append(context, "已开启电量提醒")
+                                startServiceWithNotificationCheck()
+                            } else {
+                                LogStore.append(context, "已关闭电量提醒")
+                            }
                         },
                         lowBatteryReminderEnabled = lowBatteryReminderEnabled,
                         onLowBatteryReminderEnabledChange = {
@@ -628,7 +635,14 @@ fun SmsForwarderApp(
                         onChargingReminderEnabledChange = {
                             chargingReminderEnabled = it
                             prefs.edit().putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, chargingReminderEnabled).apply()
-                            if (chargingReminderEnabled) LogStore.append(context, "已开启充电提醒") else LogStore.append(context, "已关闭充电提醒")
+                            // 重置初始化标记，确保下次服务启动时正确初始化充电状态
+                            prefs.edit().remove("last_charging_state_initialized").apply()
+                            if (chargingReminderEnabled) {
+                                LogStore.append(context, "已开启充电提醒")
+                                startServiceWithNotificationCheck()
+                            } else {
+                                LogStore.append(context, "已关闭充电提醒")
+                            }
                         },
                         batteryReminderChannelId = batteryReminderChannelId,
                         onBatteryReminderChannelIdChange = {
@@ -3007,7 +3021,8 @@ fun SettingsTab(
     permissionUpdateTrigger: Int,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
-    onImportFromGallery: () -> Unit
+    onImportFromGallery: () -> Unit,
+    onStartService: () -> Unit = {}
 ) {
     var showChannelSelectionDialog by remember { mutableStateOf(false) }
     var showImportOptionsDialog by remember { mutableStateOf(false) }

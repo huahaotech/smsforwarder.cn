@@ -80,8 +80,10 @@ class SmsForegroundService : Service() {
 
                 val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
-                if (!batteryEnabled) {
-                    Log.d(TAG_BATTERY, "电量提醒未开启，已跳过")
+                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
+                
+                if (!batteryEnabled && !chargingReminderEnabled) {
+                    Log.d(TAG_BATTERY, "所有电量提醒未开启，已跳过")
                     return
                 }
 
@@ -101,11 +103,10 @@ class SmsForegroundService : Service() {
                 val lastLowRemind = prefs.getInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, -1)
                 val lastHighRemind = prefs.getInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, -1)
 
-                // 获取 SIM 卡手机号信息
                 val phoneInfo = getSimPhoneInfo(context, prefs)
 
-                // 低电量提醒：电量低于阈值，且上次提醒的电量高于当前阈值（避免重复提醒）
-                if (lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
+                // 低电量提醒
+                if (batteryEnabled && lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
                     if (lastLowRemind == -1 || lastLowRemind > lowThreshold) {
                         var message = "【电量提醒】当前电量：$batteryPercent%，电量较低，请及时充电"
                         if (phoneInfo.isNotEmpty()) {
@@ -115,15 +116,14 @@ class SmsForegroundService : Service() {
                         prefs.edit().putInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, batteryPercent).apply()
                         LogStore.append(context, "电量提醒：低电量 $batteryPercent%")
                     }
-                } else {
-                    // 电量高于阈值时，重置低电量提醒记录
+                } else if (batteryEnabled) {
                     if (lastLowRemind != -1) {
                         prefs.edit().remove(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL).apply()
                     }
                 }
 
-                // 高电量提醒：电量高于阈值，且上次提醒的电量低于当前阈值（避免重复提醒）
-                if (highBatteryReminderEnabled && batteryPercent >= highThreshold) {
+                // 高电量提醒
+                if (batteryEnabled && highBatteryReminderEnabled && batteryPercent >= highThreshold) {
                     if (lastHighRemind == -1 || lastHighRemind < highThreshold) {
                         var message = "【电量提醒】当前电量：$batteryPercent%，电量充足"
                         if (phoneInfo.isNotEmpty()) {
@@ -133,25 +133,25 @@ class SmsForegroundService : Service() {
                         prefs.edit().putInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, batteryPercent).apply()
                         LogStore.append(context, "电量提醒：高电量 $batteryPercent%")
                     }
-                } else {
-                    // 电量低于阈值时，重置高电量提醒记录
+                } else if (batteryEnabled) {
                     if (lastHighRemind != -1) {
                         prefs.edit().remove(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL).apply()
                     }
                 }
 
-                // 充电状态变化监测
-                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
+                // 充电状态变化监测（独立于电量提醒主开关）
                 if (chargingReminderEnabled) {
                     val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
-                    val isCharging = plugged != 0
+                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+                    val isCharging = plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
                     val lastChargingState = prefs.getBoolean(Constants.PREF_LAST_CHARGING_STATE, false)
                     
                     if (isCharging && !lastChargingState) {
-                        val chargeType = when (plugged) {
-                            BatteryManager.BATTERY_PLUGGED_AC -> "AC充电"
-                            BatteryManager.BATTERY_PLUGGED_USB -> "USB充电"
-                            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线充电"
+                        val chargeType = when {
+                            plugged == BatteryManager.BATTERY_PLUGGED_AC -> "AC充电"
+                            plugged == BatteryManager.BATTERY_PLUGGED_USB -> "USB充电"
+                            plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线充电"
+                            status == BatteryManager.BATTERY_STATUS_CHARGING -> "充电"
                             else -> "充电"
                         }
                         var message = "【充电提醒】设备已开始${chargeType}，当前电量：$batteryPercent%"
@@ -193,7 +193,7 @@ class SmsForegroundService : Service() {
                 val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 val channels = loadChannels(prefs)
                 if (channels.isEmpty()) {
-                    LogStore.append(context, "电量提醒：未配置通道，已跳过")
+                    LogStore.append(context, "电量提醒：未配置转发通道，提醒无法发送，请先配置通道")
                     return@execute
                 }
 
@@ -201,47 +201,51 @@ class SmsForegroundService : Service() {
                 val targetChannels = if (reminderChannelId.isNullOrEmpty()) {
                     channels
                 } else {
-                    channels.filter { it.id == reminderChannelId }
+                    val filtered = channels.filter { it.id == reminderChannelId }
+                    if (filtered.isEmpty()) {
+                        LogStore.append(context, "电量提醒：指定的通道不存在，已跳过")
+                        channels
+                    } else {
+                        filtered
+                    }
                 }
 
                 if (targetChannels.isEmpty()) {
-                    LogStore.append(context, "电量提醒：指定通道不存在，已跳过")
+                    LogStore.append(context, "电量提醒：无可用通道，已跳过")
                     return@execute
                 }
 
                 targetChannels.forEach { channel ->
-                    executor.execute {
-                        try {
-                            val jsonObject = when (channel.type) {
-                                ChannelType.WECHAT -> buildWechatMessage(message)
-                                ChannelType.DINGTALK -> buildDingtalkMessage(message)
-                                ChannelType.FEISHU -> buildFeishuMessage(message)
-                                ChannelType.GENERIC_WEBHOOK -> buildWebhookMessage(message)
-                            }
-                            val body = jsonObject.toString().toRequestBody(JSON)
-                            val request = Request.Builder()
-                                .url(channel.target)
-                                .post(body)
-                                .build()
-
-                            httpClient.newCall(request).execute().use { response ->
-                                if (response.isSuccessful) {
-                                    LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
-                                } else {
-                                    val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { "无法读取响应" }
-                                    LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: HTTP ${response.code} ${errorBody ?: ""}")
-                                }
-                            }
-                        } catch (e: java.net.SocketTimeoutException) {
-                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 连接超时")
-                        } catch (e: java.net.UnknownHostException) {
-                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 域名解析失败")
-                        } catch (e: java.io.IOException) {
-                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 网络错误: ${e.message}")
-                        } catch (t: Throwable) {
-                            Log.w(TAG_BATTERY, "发送到 ${channel.name} 失败", t)
-                            LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${t.message ?: t.javaClass.simpleName}")
+                    try {
+                        val jsonObject = when (channel.type) {
+                            ChannelType.WECHAT -> buildWechatMessage(message)
+                            ChannelType.DINGTALK -> buildDingtalkMessage(message)
+                            ChannelType.FEISHU -> buildFeishuMessage(message)
+                            ChannelType.GENERIC_WEBHOOK -> buildWebhookMessage(message)
                         }
+                        val body = jsonObject.toString().toRequestBody(JSON)
+                        val request = Request.Builder()
+                            .url(channel.target)
+                            .post(body)
+                            .build()
+
+                        httpClient.newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
+                            } else {
+                                val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { "无法读取响应" }
+                                LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: HTTP ${response.code} ${errorBody ?: ""}")
+                            }
+                        }
+                    } catch (e: java.net.SocketTimeoutException) {
+                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 连接超时")
+                    } catch (e: java.net.UnknownHostException) {
+                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 域名解析失败")
+                    } catch (e: java.io.IOException) {
+                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 网络错误: ${e.message}")
+                    } catch (t: Throwable) {
+                        Log.w(TAG_BATTERY, "发送到 ${channel.name} 失败", t)
+                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${t.message ?: t.javaClass.simpleName}")
                     }
                 }
             } catch (t: Throwable) {
@@ -380,8 +384,39 @@ class SmsForegroundService : Service() {
             val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
             registerReceiver(batteryReceiver, batteryFilter)
             Log.d(TAG_BATTERY, "电量监听器已注册")
+            
+            // 初始化充电状态，防止服务启动时误触发
+            initializeChargingState()
         } catch (t: Throwable) {
             Log.w(TAG_BATTERY, "注册电量监听器失败", t)
+        }
+    }
+
+    private fun initializeChargingState() {
+        try {
+            val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
+            if (!chargingReminderEnabled) return
+            
+            val lastStateInitialized = prefs.getBoolean("last_charging_state_initialized", false)
+            if (lastStateInitialized) return
+            
+            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val isCharging = if (batteryIntent != null) {
+                val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+                val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+                plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
+            } else {
+                false
+            }
+            
+            prefs.edit()
+                .putBoolean(Constants.PREF_LAST_CHARGING_STATE, isCharging)
+                .putBoolean("last_charging_state_initialized", true)
+                .apply()
+            Log.d(TAG_BATTERY, "初始化充电状态: isCharging=$isCharging")
+        } catch (t: Throwable) {
+            Log.w(TAG_BATTERY, "初始化充电状态失败", t)
         }
     }
 
