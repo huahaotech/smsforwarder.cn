@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var scanActivityLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
 
     private var pendingScanResult: String? = null
-    private var showImportPreviewDialog by mutableStateOf(false)
+    private val showImportPreviewDialog = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                 val jsonStr = result.data?.getStringExtra(ScanActivity.EXTRA_SCAN_RESULT)
                 if (jsonStr != null) {
                     pendingScanResult = jsonStr
-                    showImportPreviewDialog = true
+                    showImportPreviewDialog.value = true
                 }
             }
         }
@@ -182,7 +182,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onDismissPreviewDialog = {
                         pendingScanResult = null
-                        showImportPreviewDialog = false
+                        showImportPreviewDialog.value = false
                     },
                     onConfirmImport = {
                         val jsonStr = pendingScanResult
@@ -193,9 +193,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         pendingScanResult = null
-                        showImportPreviewDialog = false
+                        showImportPreviewDialog.value = false
                     },
-                    showImportPreviewDialog = showImportPreviewDialog,
+                    showImportPreviewDialog = showImportPreviewDialog.value,
                     pendingScanResult = pendingScanResult
                 )
             }
