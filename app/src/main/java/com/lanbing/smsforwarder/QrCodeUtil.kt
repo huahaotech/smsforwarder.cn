@@ -27,7 +27,11 @@ object QrCodeUtil {
 
     private val reader by lazy {
         MultiFormatReader().apply {
-            setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)))
+            setHints(mutableMapOf<DecodeHintType, Any>().apply {
+                put(DecodeHintType.POSSIBLE_FORMATS, listOf(BarcodeFormat.QR_CODE))
+                put(DecodeHintType.TRY_HARDER, true)
+                put(DecodeHintType.CHARACTER_SET, "UTF-8")
+            })
         }
     }
 
@@ -96,10 +100,66 @@ object QrCodeUtil {
     }
 
     fun decodeFromBitmap(bitmap: Bitmap): String? {
+        val strategies = listOf(
+            { decodeBitmapDirect(bitmap) },
+            { decodeBitmapCenterCrop(bitmap) },
+            { decodeBitmapInverted(bitmap) }
+        )
+        for (strategy in strategies) {
+            val result = strategy()
+            if (result != null) return result
+        }
+        return null
+    }
+
+    private fun decodeBitmapDirect(bitmap: Bitmap): String? {
         return try {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val source: LuminanceSource = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+            val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val result = reader.decode(binaryBitmap)
+            decodeContent(result.text)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun decodeBitmapCenterCrop(bitmap: Bitmap): String? {
+        return try {
+            val cropW = (bitmap.width * 0.6).toInt()
+            val cropH = (bitmap.height * 0.6).toInt()
+            val offsetX = (bitmap.width - cropW) / 2
+            val offsetY = (bitmap.height - cropH) / 2
+            val cropped = Bitmap.createBitmap(bitmap, offsetX, offsetY, cropW, cropH)
+            try {
+                val pixels = IntArray(cropped.width * cropped.height)
+                cropped.getPixels(pixels, 0, cropped.width, 0, 0, cropped.width, cropped.height)
+                val source = RGBLuminanceSource(cropped.width, cropped.height, pixels)
+                val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+                val result = reader.decode(binaryBitmap)
+                decodeContent(result.text)
+            } finally {
+                cropped.recycle()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun decodeBitmapInverted(bitmap: Bitmap): String? {
+        return try {
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            val inverted = IntArray(pixels.size)
+            for (i in pixels.indices) {
+                val color = pixels[i]
+                val r = 255 - Color.red(color)
+                val g = 255 - Color.green(color)
+                val b = 255 - Color.blue(color)
+                inverted[i] = Color.rgb(r, g, b)
+            }
+            val source = RGBLuminanceSource(bitmap.width, bitmap.height, inverted)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
             decodeContent(result.text)
@@ -109,8 +169,62 @@ object QrCodeUtil {
     }
 
     fun decodeFromYuv(data: ByteArray, width: Int, height: Int): String? {
+        val strategies = listOf(
+            { decodeYuvFull(data, width, height) },
+            { decodeYuvCenterCrop(data, width, height) },
+            { decodeYuvDownsampled(data, width, height) }
+        )
+        for (strategy in strategies) {
+            val result = strategy()
+            if (result != null) return result
+        }
+        return null
+    }
+
+    private fun decodeYuvFull(data: ByteArray, width: Int, height: Int): String? {
         return try {
             val source = PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val result = reader.decode(binaryBitmap)
+            decodeContent(result.text)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun decodeYuvCenterCrop(data: ByteArray, width: Int, height: Int): String? {
+        return try {
+            val cropW = (width * 0.6).toInt()
+            val cropH = (height * 0.6).toInt()
+            val offsetX = (width - cropW) / 2
+            val offsetY = (height - cropH) / 2
+            val source = PlanarYUVLuminanceSource(data, width, height, offsetX, offsetY, cropW, cropH, false)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val result = reader.decode(binaryBitmap)
+            decodeContent(result.text)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun decodeYuvDownsampled(data: ByteArray, width: Int, height: Int): String? {
+        return try {
+            val scale = 2
+            val newWidth = width / scale
+            val newHeight = height / scale
+            val newData = ByteArray(newWidth * newHeight)
+            for (y in 0 until newHeight) {
+                for (x in 0 until newWidth) {
+                    var sum = 0
+                    for (dy in 0 until scale) {
+                        for (dx in 0 until scale) {
+                            sum += data[(y * scale + dy) * width + (x * scale + dx)].toInt() and 0xFF
+                        }
+                    }
+                    newData[y * newWidth + x] = (sum / (scale * scale)).toByte()
+                }
+            }
+            val source = PlanarYUVLuminanceSource(newData, newWidth, newHeight, 0, 0, newWidth, newHeight, false)
             val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
             decodeContent(result.text)

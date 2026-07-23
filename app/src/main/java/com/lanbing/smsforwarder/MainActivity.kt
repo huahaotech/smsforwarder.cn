@@ -4064,7 +4064,7 @@ private fun generateConfigJson(
     startOnBoot: Boolean
 ): String {
     return JSONObject().apply {
-        put("version", "2.7.11")
+        put("version", "2.8.2")
         put("exportTime", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()))
         
         val channelsArr = JSONArray()

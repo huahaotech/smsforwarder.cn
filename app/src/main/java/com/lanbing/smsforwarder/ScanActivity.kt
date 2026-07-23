@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
@@ -75,6 +76,8 @@ class ScanActivity : ComponentActivity() {
     private var previewView: TextureView? = null
     private var cameraSetupDone = false
     private var cameraPermissionGranted = false
+    private var frameCount = 0
+    private var lastDecodeTime = 0L
 
     private lateinit var requestCameraPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var imagePickerLauncher: ActivityResultLauncher<androidx.activity.result.PickVisualMediaRequest>
@@ -276,7 +279,15 @@ class ScanActivity : ComponentActivity() {
             return
         }
 
+        val now = System.currentTimeMillis()
+        if (now - lastDecodeTime < 150) {
+            image.close()
+            return
+        }
+        lastDecodeTime = now
+
         try {
+            frameCount++
             val yPlane = image.planes[0]
             val yBuffer = yPlane.buffer
             val yRowStride = yPlane.rowStride
@@ -297,9 +308,37 @@ class ScanActivity : ComponentActivity() {
                 runOnUiThread {
                     returnScanResult(result)
                 }
+                return
+            }
+
+            if (frameCount % 4 == 0) {
+                val bitmap = yuvToGrayscaleBitmap(yData, width, height)
+                if (bitmap != null) {
+                    val bitmapResult = QrCodeUtil.decodeFromBitmap(bitmap)
+                    if (bitmapResult != null) {
+                        isScanned = true
+                        runOnUiThread {
+                            returnScanResult(bitmapResult)
+                        }
+                    }
+                    bitmap.recycle()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Image processing error", e)
+        }
+    }
+
+    private fun yuvToGrayscaleBitmap(yData: ByteArray, width: Int, height: Int): Bitmap? {
+        return try {
+            val pixels = IntArray(width * height)
+            for (i in yData.indices) {
+                val gray = yData[i].toInt() and 0xFF
+                pixels[i] = android.graphics.Color.rgb(gray, gray, gray)
+            }
+            Bitmap.createBitmap(pixels, width, height, Bitmap.Config.RGB_565)
+        } catch (e: Exception) {
+            null
         }
     }
 
