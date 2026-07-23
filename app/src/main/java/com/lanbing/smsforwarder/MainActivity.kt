@@ -4069,20 +4069,8 @@ private fun decodeQrCodeFromImage(context: Context, uri: Uri, callback: (String?
             return
         }
         
-        val width = bitmap.width
-        val height = bitmap.height
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        
-        val binaryBitmap = com.google.zxing.BinaryBitmap(
-            com.google.zxing.common.HybridBinarizer(
-                com.google.zxing.RGBLuminanceSource(width, height, pixels)
-            )
-        )
-        
-        val reader = com.google.zxing.qrcode.QRCodeReader()
-        val result = reader.decode(binaryBitmap)
-        callback(result.text)
+        val result = QrCodeUtil.decodeFromBitmap(bitmap)
+        callback(result)
     } catch (e: Exception) {
         e.printStackTrace()
         callback(null)
