@@ -94,7 +94,6 @@ class MainActivity : ComponentActivity() {
     private var onPermissionChanged: (() -> Unit)? = null
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
-    private lateinit var scanActivityLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
 
     private var pendingScanResult: String? = null
     private val showImportPreviewDialog = mutableStateOf(false)
@@ -104,19 +103,18 @@ class MainActivity : ComponentActivity() {
         
         configImportLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let {
-                importConfig(this, it) {
-                    onPermissionChanged?.invoke()
-                    onConfigChanged?.invoke()
-                }
-            }
-        }
-
-        scanActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val jsonStr = result.data?.getStringExtra(ScanActivity.EXTRA_SCAN_RESULT)
-                if (jsonStr != null) {
-                    pendingScanResult = jsonStr
-                    showImportPreviewDialog.value = true
+                try {
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val jsonStr = inputStream?.bufferedReader()?.use { it.readText() }
+                    inputStream?.close()
+                    if (jsonStr != null) {
+                        pendingScanResult = jsonStr
+                        showImportPreviewDialog.value = true
+                    } else {
+                        Toast.makeText(this, "读取文件失败", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -176,9 +174,12 @@ class MainActivity : ComponentActivity() {
                     },
                     onStartService = { startServiceWithNotificationCheck() },
                     onStopService = { onStopService() },
-                    onImportConfig = {
-                        pendingScanResult = null
-                        scanActivityLauncher.launch(Intent(this, ScanActivity::class.java))
+                    onImportFromFile = {
+                        configImportLauncher.launch("application/json")
+                    },
+                    onPasteImport = { text ->
+                        pendingScanResult = text
+                        showImportPreviewDialog.value = true
                     },
                     onDismissPreviewDialog = {
                         pendingScanResult = null
@@ -252,11 +253,12 @@ fun SmsForwarderApp(
     onRequestNotificationPermission: () -> Unit,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onImportConfig: () -> Unit = {},
     onDismissPreviewDialog: () -> Unit = {},
     onConfirmImport: () -> Unit = {},
     showImportPreviewDialog: Boolean = false,
-    pendingScanResult: String? = null
+    pendingScanResult: String? = null,
+    onImportFromFile: () -> Unit = {},
+    onPasteImport: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
@@ -279,11 +281,12 @@ fun SmsForwarderApp(
     var channels by remember(configUpdateTrigger) { mutableStateOf(loadChannels(prefs)) }
     var configs by remember(configUpdateTrigger) { mutableStateOf(loadConfigs(prefs)) }
 
-    // QR Code dialog
-    var showQrCodeDialog by remember { mutableStateOf(false) }
-    var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var qrCodeError by remember { mutableStateOf<String?>(null) }
-    var isGeneratingQr by remember { mutableStateOf(false) }
+    // 导出/导入对话框状态
+    var showExportDialog by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showPasteDialog by remember { mutableStateOf(false) }
+    var exportJsonStr by remember { mutableStateOf("") }
+    var pasteText by remember { mutableStateOf("") }
 
     // Channel form state
     var newChannelName by remember { mutableStateOf("") }
@@ -689,23 +692,12 @@ fun SmsForwarderApp(
                         permissionUpdateTrigger = permissionUpdateTrigger,
                         onExportConfig = {
                             val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
-                            qrCodeBitmap = null
-                            qrCodeError = null
-                            isGeneratingQr = true
-                            showQrCodeDialog = true
-                            Thread {
-                                val bitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
-                                (context as Activity).runOnUiThread {
-                                    isGeneratingQr = false
-                                    if (bitmap != null) {
-                                        qrCodeBitmap = bitmap
-                                    } else {
-                                        qrCodeError = "配置数据过大或生成失败，请减少配置内容后重试"
-                                    }
-                                }
-                            }.start()
+                            exportJsonStr = jsonStr
+                            showExportDialog = true
                         },
-                        onImportConfig = onImportConfig,
+                        onImportConfig = {
+                            showImportDialog = true
+                        },
                         onStartService = onStartService
                     )
                     4 -> LogTab(
@@ -953,98 +945,239 @@ fun SmsForwarderApp(
         )
     }
 
-    // 二维码导出弹窗
-    if (showQrCodeDialog) {
-        Dialog(onDismissRequest = { showQrCodeDialog = false }) {
+    // 导出配置弹窗
+    if (showExportDialog) {
+        Dialog(onDismissRequest = { showExportDialog = false }) {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
                 shape = RoundedCornerShape(20.dp),
                 elevation = CardDefaults.cardElevation(8.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        "配置二维码",
+                        "导出配置",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
-                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.White)
-                                .clip(RoundedCornerShape(12.dp))
-                        ) {
-                            when {
-                                qrCodeError != null -> {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize().padding(16.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Text(
-                                            text = "❌ 生成失败",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = Color.Red,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = qrCodeError!!,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Center,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                qrCodeBitmap != null -> {
-                                    Image(
-                                        bitmap = qrCodeBitmap!!.asImageBitmap(),
-                                        contentDescription = "配置二维码",
-                                        modifier = Modifier.fillMaxSize().padding(12.dp)
-                                    )
-                                }
-                                else -> {
-                                    CircularProgressIndicator(modifier = Modifier.size(48.dp).align(Alignment.Center))
-                                }
-                            }
-                        }
-                    }
-                    
                     Spacer(modifier = Modifier.height(12.dp))
-                    
                     Text(
-                        when {
-                            qrCodeError != null -> "请减少配置内容后重试，或通过手动备份导出"
-                            isGeneratingQr -> "正在生成二维码，请稍候..."
-                            else -> "截图保存，可在应用卸载后重新恢复数据，或导入到其他设备"
-                        },
+                        "配置内容已生成，选择一种方式导出：",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (qrCodeError != null) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                        textAlign = TextAlign.Center
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    
                     Spacer(modifier = Modifier.height(20.dp))
-                    
+
                     Button(
-                        onClick = { showQrCodeDialog = false },
+                        onClick = {
+                            exportConfig(context, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                            showExportDialog = false
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
+                        Icon(Icons.Filled.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("分享文件", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("短信转发配置", exportJsonStr)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "配置已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                            showExportDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("复制文本", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+                                val fileName = "sms_forwarder_config_${System.currentTimeMillis()}.json"
+                                val file = java.io.File(downloadsDir, fileName)
+                                file.writeText(exportJsonStr, Charsets.UTF_8)
+                                Toast.makeText(context, "已保存到: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                            showExportDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Filled.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("保存到本地", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        "💡 配置文件包含所有通道、规则和设置，可用于备份或迁移到其他设备",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TextButton(
+                        onClick = { showExportDialog = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
                         Text("关闭", fontSize = 16.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // 导入配置弹窗
+    if (showImportDialog) {
+        Dialog(onDismissRequest = { showImportDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "导入配置",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "选择一种导入方式：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            showImportDialog = false
+                            onImportFromFile()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("从文件选择", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            showImportDialog = false
+                            showPasteDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Filled.ContentPaste, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("粘贴文本导入", fontSize = 16.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TextButton(
+                        onClick = { showImportDialog = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("取消", fontSize = 16.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // 粘贴文本弹窗
+    if (showPasteDialog) {
+        Dialog(onDismissRequest = { showPasteDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "粘贴配置文本",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "将导出的配置文本粘贴到下方输入框",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = pasteText,
+                        onValueChange = { pasteText = it },
+                        label = { Text("配置文本") },
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 10
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showPasteDialog = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("取消")
+                        }
+                        Button(
+                            onClick = {
+                                if (pasteText.isNotBlank()) {
+                                    val text = pasteText
+                                    pasteText = ""
+                                    showPasteDialog = false
+                                    onPasteImport(text)
+                                } else {
+                                    Toast.makeText(context, "请粘贴配置文本", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("确认导入")
+                        }
                     }
                 }
             }
@@ -1099,7 +1232,7 @@ fun ImportPreviewDialog(
 
                 if (parseError) {
                     Text(
-                        text = "二维码内容无法解析为有效的配置格式",
+                        text = "配置内容无法解析为有效的格式",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Red
                     )
@@ -3642,7 +3775,7 @@ fun SettingsTab(
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
                     ) {
-                        Icon(Icons.Filled.QrCode, contentDescription = null)
+                        Icon(Icons.Filled.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("导出配置", fontSize = 16.sp)
                     }
@@ -3655,7 +3788,7 @@ fun SettingsTab(
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
                     ) {
-                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
+                        Icon(Icons.Filled.Download, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("导入配置", fontSize = 16.sp)
                     }
@@ -4227,114 +4360,12 @@ internal fun importConfigFromJson(
         
         editor.apply()
         
-        LogStore.append(context, "通过二维码导入配置成功")
+        LogStore.append(context, "通过配置导入成功")
         onImportSuccess()
         Toast.makeText(context, "配置导入成功", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         e.printStackTrace()
-        LogStore.append(context, "通过二维码导入配置失败: ${e.message}")
-        Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun decodeQrCodeFromImage(context: Context, uri: Uri, callback: (String?) -> Unit) {
-    try {
-        val inputStream = context.contentResolver.openInputStream(uri)
-        val bitmap = BitmapFactory.decodeStream(inputStream)
-        inputStream?.close()
-        
-        if (bitmap == null) {
-            callback(null)
-            return
-        }
-        
-        val result = QrCodeUtil.decodeFromBitmap(bitmap)
-        callback(result)
-    } catch (e: Exception) {
-        e.printStackTrace()
-        callback(null)
-    }
-}
-
-private fun importConfig(
-    context: Context,
-    fileUri: Uri,
-    onImportSuccess: () -> Unit
-) {
-    try {
-        val inputStream = context.contentResolver.openInputStream(fileUri)
-            ?: throw Exception("无法打开文件")
-        val jsonStr = inputStream.bufferedReader().use { it.readText() }
-        inputStream.close()
-        
-        val json = JSONObject(jsonStr)
-        
-        val channels = mutableListOf<Channel>()
-        val channelsArr = json.optJSONArray("channels") ?: JSONArray()
-        for (i in 0 until channelsArr.length()) {
-            val chObj = channelsArr.getJSONObject(i)
-            val typeStr = chObj.optString("type", "WECHAT")
-            val type = try { ChannelType.valueOf(typeStr) } catch (_: Throwable) { ChannelType.WECHAT }
-            channels.add(Channel(
-                id = chObj.getString("id"),
-                name = chObj.getString("name"),
-                type = type,
-                target = chObj.getString("target")
-            ))
-        }
-        
-        val configs = mutableListOf<KeywordConfig>()
-        val configsArr = json.optJSONArray("keywordConfigs") ?: JSONArray()
-        for (i in 0 until configsArr.length()) {
-            val cfgObj = configsArr.getJSONObject(i)
-            configs.add(KeywordConfig(
-                id = cfgObj.getString("id"),
-                keyword = cfgObj.getString("keyword"),
-                channelId = cfgObj.getString("channelId")
-            ))
-        }
-        
-        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        
-        saveChannels(prefs, channels)
-        saveConfigs(prefs, configs)
-        
-        editor.putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, json.optBoolean("showReceiverPhone", true))
-        editor.putBoolean(Constants.PREF_SHOW_SENDER_PHONE, json.optBoolean("showSenderPhone", true))
-        editor.putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, json.optBoolean("highlightVerificationCode", true))
-        editor.putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, json.optBoolean("batteryReminderEnabled", false))
-        editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
-        editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
-        editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
-        val reminderChannelId = json.optString("batteryReminderChannelId", "")
-        if (reminderChannelId.isEmpty()) {
-            editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
-        } else {
-            editor.putString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, reminderChannelId)
-        }
-        editor.putInt(Constants.PREF_LOW_BATTERY_THRESHOLD, json.optInt("lowBatteryThreshold", Constants.DEFAULT_LOW_BATTERY_THRESHOLD))
-        editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
-        editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
-        
-        val sim1 = json.optString("customSim1Phone", "")
-        val sim2 = json.optString("customSim2Phone", "")
-        if (sim1.isEmpty()) {
-            editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
-        } else {
-            editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1)
-        }
-        if (sim2.isEmpty()) {
-            editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
-        } else {
-            editor.putString(Constants.PREF_CUSTOM_SIM2_PHONE, sim2)
-        }
-        
-        editor.apply()
-        
-        Toast.makeText(context, "配置导入成功", Toast.LENGTH_SHORT).show()
-        onImportSuccess()
-    } catch (e: Exception) {
+        LogStore.append(context, "通过配置导入失败: ${e.message}")
         Toast.makeText(context, "导入失败: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
