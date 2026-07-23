@@ -614,7 +614,7 @@ fun SmsForwarderApp(
                             prefs.edit().remove("last_charging_state_initialized").apply()
                             if (batteryReminderEnabled) {
                                 LogStore.append(context, "已开启电量提醒")
-                                startServiceWithNotificationCheck()
+                                onStartService()
                             } else {
                                 LogStore.append(context, "已关闭电量提醒")
                             }
@@ -639,7 +639,7 @@ fun SmsForwarderApp(
                             prefs.edit().remove("last_charging_state_initialized").apply()
                             if (chargingReminderEnabled) {
                                 LogStore.append(context, "已开启充电提醒")
-                                startServiceWithNotificationCheck()
+                                onStartService()
                             } else {
                                 LogStore.append(context, "已关闭充电提醒")
                             }
@@ -675,7 +675,8 @@ fun SmsForwarderApp(
                         onImportConfig = onImportConfig,
                         onImportFromGallery = {
                             (context as MainActivity).imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }
+                        },
+                        onStartService = { startServiceWithNotificationCheck() }
                     )
                     4 -> LogTab(
                         logs = logs,
