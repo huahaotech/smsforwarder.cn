@@ -264,6 +264,8 @@ fun SmsForwarderApp(
     // QR Code dialog
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var qrCodeBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var qrCodeError by remember { mutableStateOf<String?>(null) }
+    var isGeneratingQr by remember { mutableStateOf(false) }
 
     // Channel form state
     var newChannelName by remember { mutableStateOf("") }
@@ -669,8 +671,21 @@ fun SmsForwarderApp(
                         permissionUpdateTrigger = permissionUpdateTrigger,
                         onExportConfig = {
                             val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
-                            qrCodeBitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
+                            qrCodeBitmap = null
+                            qrCodeError = null
+                            isGeneratingQr = true
                             showQrCodeDialog = true
+                            Thread {
+                                val bitmap = QrCodeUtil.generateQrCode(jsonStr, 512)
+                                (context as Activity).runOnUiThread {
+                                    isGeneratingQr = false
+                                    if (bitmap != null) {
+                                        qrCodeBitmap = bitmap
+                                    } else {
+                                        qrCodeError = "配置数据过大或生成失败，请减少配置内容后重试"
+                                    }
+                                }
+                            }.start()
                         },
                         onImportConfig = onImportConfig,
                         onImportFromGallery = {
@@ -956,14 +971,38 @@ fun SmsForwarderApp(
                                 .background(Color.White)
                                 .clip(RoundedCornerShape(12.dp))
                         ) {
-                            qrCodeBitmap?.let { bitmap ->
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "配置二维码",
-                                    modifier = Modifier.fillMaxSize().padding(12.dp)
-                                )
-                            } ?: run {
-                                CircularProgressIndicator(modifier = Modifier.size(48.dp).align(Alignment.Center))
+                            when {
+                                qrCodeError != null -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = "❌ 生成失败",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color.Red,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = qrCodeError!!,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                qrCodeBitmap != null -> {
+                                    Image(
+                                        bitmap = qrCodeBitmap!!.asImageBitmap(),
+                                        contentDescription = "配置二维码",
+                                        modifier = Modifier.fillMaxSize().padding(12.dp)
+                                    )
+                                }
+                                else -> {
+                                    CircularProgressIndicator(modifier = Modifier.size(48.dp).align(Alignment.Center))
+                                }
                             }
                         }
                     }
@@ -971,9 +1010,13 @@ fun SmsForwarderApp(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     Text(
-                        "截图保存，可在应用卸载后重新恢复数据，或导入到其他设备",
+                        when {
+                            qrCodeError != null -> "请减少配置内容后重试，或通过手动备份导出"
+                            isGeneratingQr -> "正在生成二维码，请稍候..."
+                            else -> "截图保存，可在应用卸载后重新恢复数据，或导入到其他设备"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (qrCodeError != null) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         textAlign = TextAlign.Center
                     )
