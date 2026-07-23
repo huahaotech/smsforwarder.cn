@@ -32,7 +32,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -95,7 +94,10 @@ class MainActivity : ComponentActivity() {
     private var onPermissionChanged: (() -> Unit)? = null
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
-    internal lateinit var imagePickerLauncher: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>
+    private lateinit var scanActivityLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
+
+    private var pendingScanResult: String? = null
+    private var showImportPreviewDialog by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,17 +111,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        imagePickerLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            uri?.let {
-                decodeQrCodeFromImage(this, uri) { content ->
-                    content?.let { jsonStr ->
-                        importConfigFromJson(this, jsonStr) {
-                            onPermissionChanged?.invoke()
-                            onConfigChanged?.invoke()
-                        }
-                    } ?: run {
-                        Toast.makeText(this, "未能识别图片中的二维码", Toast.LENGTH_SHORT).show()
-                    }
+        scanActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val jsonStr = result.data?.getStringExtra(ScanActivity.EXTRA_SCAN_RESULT)
+                if (jsonStr != null) {
+                    pendingScanResult = jsonStr
+                    showImportPreviewDialog = true
                 }
             }
         }
@@ -180,9 +177,26 @@ class MainActivity : ComponentActivity() {
                     onStartService = { startServiceWithNotificationCheck() },
                     onStopService = { onStopService() },
                     onImportConfig = {
-                        val intent = Intent(this, ScanActivity::class.java)
-                        startActivity(intent)
-                    }
+                        pendingScanResult = null
+                        scanActivityLauncher.launch(Intent(this, ScanActivity::class.java))
+                    },
+                    onDismissPreviewDialog = {
+                        pendingScanResult = null
+                        showImportPreviewDialog = false
+                    },
+                    onConfirmImport = {
+                        val jsonStr = pendingScanResult
+                        if (jsonStr != null) {
+                            importConfigFromJson(this, jsonStr) {
+                                onPermissionChanged?.invoke()
+                                onConfigChanged?.invoke()
+                            }
+                        }
+                        pendingScanResult = null
+                        showImportPreviewDialog = false
+                    },
+                    showImportPreviewDialog = showImportPreviewDialog,
+                    pendingScanResult = pendingScanResult
                 )
             }
         }
@@ -238,7 +252,11 @@ fun SmsForwarderApp(
     onRequestNotificationPermission: () -> Unit,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onImportConfig: () -> Unit = {}
+    onImportConfig: () -> Unit = {},
+    onDismissPreviewDialog: () -> Unit = {},
+    onConfirmImport: () -> Unit = {},
+    showImportPreviewDialog: Boolean = false,
+    pendingScanResult: String? = null
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
@@ -688,9 +706,6 @@ fun SmsForwarderApp(
                             }.start()
                         },
                         onImportConfig = onImportConfig,
-                        onImportFromGallery = {
-                            (context as MainActivity).imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
                         onStartService = onStartService
                     )
                     4 -> LogTab(
@@ -1034,6 +1049,154 @@ fun SmsForwarderApp(
                 }
             }
         }
+    }
+
+    // 导入配置预览弹窗
+    if (showImportPreviewDialog && pendingScanResult != null) {
+        ImportPreviewDialog(
+            jsonStr = pendingScanResult!!,
+            onConfirm = onConfirmImport,
+            onDismiss = onDismissPreviewDialog
+        )
+    }
+}
+
+@Composable
+fun ImportPreviewDialog(
+    jsonStr: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var parsedConfig by remember { mutableStateOf<org.json.JSONObject?>(null) }
+    var parseError by remember { mutableStateOf(false) }
+
+    remember(jsonStr) {
+        try {
+            parsedConfig = org.json.JSONObject(jsonStr)
+            parseError = false
+        } catch (_: Exception) {
+            parseError = true
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "确认导入配置",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (parseError) {
+                    Text(
+                        text = "二维码内容无法解析为有效的配置格式",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Red
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = jsonStr.take(200) + if (jsonStr.length > 200) "..." else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 5
+                    )
+                } else {
+                    Text(
+                        text = "以下是将要导入的配置内容，请确认：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            parsedConfig?.let { config ->
+                                val channels = config.optJSONArray("channels")
+                                val configs = config.optJSONArray("configs")
+                                val batteryReminder = config.optBoolean("batteryReminderEnabled", false)
+                                val chargingReminder = config.optBoolean("chargingReminderEnabled", false)
+                                val lowBatteryThreshold = config.optInt("lowBatteryThreshold", 20)
+                                val highBatteryThreshold = config.optInt("highBatteryThreshold", 80)
+
+                                ImportPreviewItem(label = "转发通道", value = "${channels?.length() ?: 0} 个")
+                                ImportPreviewItem(label = "转发规则", value = "${configs?.length() ?: 0} 条")
+                                ImportPreviewItem(label = "电量提醒", value = if (batteryReminder) "已开启" else "已关闭")
+                                ImportPreviewItem(label = "充电提醒", value = if (chargingReminder) "已开启" else "已关闭")
+                                ImportPreviewItem(label = "低电量阈值", value = "$lowBatteryThreshold%")
+                                ImportPreviewItem(label = "高电量阈值", value = "$highBatteryThreshold%")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "⚠️ 导入将覆盖当前所有配置",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFE67E22),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("取消")
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        enabled = !parseError,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("确认导入")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportPreviewItem(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -3065,11 +3228,9 @@ fun SettingsTab(
     permissionUpdateTrigger: Int,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
-    onImportFromGallery: () -> Unit,
     onStartService: () -> Unit = {}
 ) {
     var showChannelSelectionDialog by remember { mutableStateOf(false) }
-    var showImportOptionsDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -3489,7 +3650,7 @@ fun SettingsTab(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
-                        onClick = { showImportOptionsDialog = true },
+                        onClick = onImportConfig,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(vertical = 14.dp)
@@ -3755,47 +3916,6 @@ fun SettingsTab(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showChannelSelectionDialog = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-
-    if (showImportOptionsDialog) {
-        AlertDialog(
-            onDismissRequest = { showImportOptionsDialog = false },
-            title = { Text("选择导入方式") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = {
-                            showImportOptionsDialog = false
-                            onImportConfig()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("扫码导入", fontSize = 16.sp)
-                    }
-                    TextButton(
-                        onClick = {
-                            showImportOptionsDialog = false
-                            onImportFromGallery()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("从相册选取", fontSize = 16.sp)
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showImportOptionsDialog = false }) {
                     Text("取消")
                 }
             }

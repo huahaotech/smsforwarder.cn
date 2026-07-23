@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.graphics.SurfaceTexture
@@ -24,25 +25,25 @@ import android.view.Surface
 import android.view.TextureView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -62,7 +63,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import org.json.JSONObject
 
 class ScanActivity : ComponentActivity() {
     private var cameraDevice: CameraDevice? = null
@@ -76,6 +76,7 @@ class ScanActivity : ComponentActivity() {
     private var cameraPermissionGranted = false
 
     private lateinit var requestCameraPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var imagePickerLauncher: ActivityResultLauncher<androidx.activity.result.PickVisualMediaRequest>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +91,24 @@ class ScanActivity : ComponentActivity() {
             } else {
                 Toast.makeText(this, "请授予相机权限以扫描二维码", Toast.LENGTH_LONG).show()
                 finish()
+            }
+        }
+
+        imagePickerLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let {
+                try {
+                    val content = contentResolver.openInputStream(uri)?.use { stream ->
+                        val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                        bitmap?.let { QrCodeUtil.decodeFromBitmap(it) }
+                    }
+                    if (content != null) {
+                        returnScanResult(content)
+                    } else {
+                        Toast.makeText(this, "未能识别图片中的二维码", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "读取图片失败", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -115,7 +134,10 @@ class ScanActivity : ComponentActivity() {
 
                 ScanScreen(
                     onBackClick = { finish() },
-                    onRequestCameraPermission = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }
+                    onRequestCameraPermission = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
+                    onPickFromGallery = {
+                        imagePickerLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
                 ) { textureView ->
                     previewView = textureView
                     if (cameraPermissionGranted) {
@@ -128,6 +150,14 @@ class ScanActivity : ComponentActivity() {
         if (!cameraPermissionGranted) {
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    private fun returnScanResult(jsonStr: String) {
+        val intent = Intent().apply {
+            putExtra("SCAN_RESULT", jsonStr)
+        }
+        setResult(Activity.RESULT_OK, intent)
+        finish()
     }
 
     private fun checkCameraPermission(): Boolean {
@@ -264,25 +294,11 @@ class ScanActivity : ComponentActivity() {
             if (result != null) {
                 isScanned = true
                 runOnUiThread {
-                    if (parseAndImportConfig(result)) {
-                        finish()
-                    }
+                    returnScanResult(result)
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Image processing error", e)
-        }
-    }
-
-    private fun parseAndImportConfig(jsonStr: String): Boolean {
-        return try {
-            JSONObject(jsonStr)
-            importConfigFromJson(this, jsonStr) {
-                Toast.makeText(this, "配置导入成功", Toast.LENGTH_SHORT).show()
-            }
-            true
-        } catch (e: Exception) {
-            false
         }
     }
 
@@ -329,6 +345,7 @@ class ScanActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "ScanActivity"
+        const val EXTRA_SCAN_RESULT = "SCAN_RESULT"
     }
 }
 
@@ -337,6 +354,7 @@ class ScanActivity : ComponentActivity() {
 fun ScanScreen(
     onBackClick: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onRequestCameraPermission: () -> Unit,
+    onPickFromGallery: () -> Unit,
     onTextureViewReady: (TextureView) -> Unit
 ) {
     Scaffold(
@@ -345,93 +363,62 @@ fun ScanScreen(
                 title = {
                     Text(
                         text = "扫描二维码",
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
                 )
             )
-        }
+        },
+        containerColor = Color.Black
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .padding(it)
                 .fillMaxSize()
         ) {
-            Box(
-                modifier = Modifier.weight(1f)
+            AndroidView(
+                factory = { context ->
+                    TextureView(context).apply {
+                        onTextureViewReady(this)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                AndroidView(
-                    factory = { context ->
-                        TextureView(context).apply {
-                            onTextureViewReady(this)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
+                Text(
+                    text = "将二维码对准屏幕，自动识别",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center
                 )
 
-                Column(
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(280.dp)
-                            .border(
-                                width = 3.dp,
-                                color = Color.White,
-                                shape = RoundedCornerShape(24.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val cornerShapes = listOf(
-                            Alignment.TopStart to androidx.compose.foundation.shape.RoundedCornerShape(topStart = 16.dp),
-                            Alignment.TopEnd to androidx.compose.foundation.shape.RoundedCornerShape(topEnd = 16.dp),
-                            Alignment.BottomStart to androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 16.dp),
-                            Alignment.BottomEnd to androidx.compose.foundation.shape.RoundedCornerShape(bottomEnd = 16.dp)
-                        )
-                        cornerShapes.forEach { (alignment, shape) ->
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .border(
-                                        width = 4.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = shape
-                                    )
-                                    .align(alignment)
-                            )
-                        }
-                    }
-                }
-            }
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "将二维码对准扫描框",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "系统将自动识别",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center
-                    )
+                OutlinedButton(
+                    onClick = onPickFromGallery,
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.White
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("从相册选取")
                 }
             }
         }
