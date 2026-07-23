@@ -47,6 +47,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.Typography
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
@@ -178,7 +180,7 @@ class ScanActivity : ComponentActivity() {
             }
 
             if (textureView.isAvailable) {
-                openCamera(cameraManager, cameraId, textureView.surfaceTexture, previewSize)
+                openCamera(cameraManager, cameraId, textureView.surfaceTexture!!, previewSize)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Camera setup failed", e)
@@ -220,7 +222,7 @@ class ScanActivity : ComponentActivity() {
                             builder.addTarget(previewSurface)
                             builder.addTarget(readerSurface)
                             builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_AUTO)
+                            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
                             session.setRepeatingRequest(builder.build(), null, backgroundHandler)
                         } catch (e: Exception) {
                             Log.e(TAG, "Capture session error", e)
@@ -298,7 +300,7 @@ class ScanActivity : ComponentActivity() {
     private fun chooseOptimalSize(cameraManager: CameraManager, cameraId: String, targetWidth: Int, targetHeight: Int): Size {
         val characteristics = cameraManager.getCameraCharacteristics(cameraId)
         val configs = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val choices = configs.getOutputSizes(android.graphics.ImageFormat.YUV_420_888)
+        val choices = configs?.getOutputSizes(android.graphics.ImageFormat.YUV_420_888) ?: arrayOf(Size(1920, 1080))
 
         var optimalSize = choices[0]
         var minDiff = java.lang.Math.abs(optimalSize.width - targetWidth) + java.lang.Math.abs(optimalSize.height - targetHeight)

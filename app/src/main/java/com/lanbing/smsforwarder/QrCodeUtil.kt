@@ -12,6 +12,7 @@ import com.google.zxing.MultiFormatWriter
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.BitMatrix
+import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
 object QrCodeUtil {
@@ -51,7 +52,7 @@ object QrCodeUtil {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
             val source: LuminanceSource = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
-            val binaryBitmap = BinaryBitmap(source)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
             result.text
         } catch (e: Exception) {
@@ -62,7 +63,7 @@ object QrCodeUtil {
     fun decodeFromYuv(data: ByteArray, width: Int, height: Int): String? {
         return try {
             val source = PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false)
-            val binaryBitmap = BinaryBitmap(source)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
             val result = reader.decode(binaryBitmap)
             result.text
         } catch (e: Exception) {
