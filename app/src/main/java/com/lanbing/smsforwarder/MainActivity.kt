@@ -4293,7 +4293,7 @@ private fun saveConfigToDownloads(
         return uri
     } else {
         @Suppress("DEPRECATION")
-        val downloadsDir = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS))
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
         if (!downloadsDir.exists()) downloadsDir.mkdirs()
         val file = java.io.File(downloadsDir, fileName)
         file.writeText(jsonStr, Charsets.UTF_8)
