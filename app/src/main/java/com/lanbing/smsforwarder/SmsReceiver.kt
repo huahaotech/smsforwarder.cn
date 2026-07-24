@@ -30,6 +30,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 /**
@@ -184,38 +185,53 @@ class SmsReceiver : BroadcastReceiver() {
             recentMessages.entries.removeIf { (now - it.value) > Constants.DUPLICATE_WINDOW_MS * 2 }
         }
 
-        // 供 NetworkChangeReceiver 调用，重试失败的消息
+        private val scheduledRetries = ConcurrentHashMap<String, ScheduledFuture<*>>()
+        private val scheduler = Executors.newScheduledThreadPool(1)
+
+        @JvmStatic
+        fun scheduleRetry(context: Context, failed: FailedMessage) {
+            val existing = scheduledRetries[failed.channelTarget + "_" + failed.timestamp]
+            if (existing != null && !existing.isDone) return
+
+            val future = scheduler.schedule({
+                try {
+                    val result = SmsReceiver().sendToWebhook(
+                        failed.channelTarget, failed.sender, failed.content,
+                        failed.receiverPhoneNumber, failed.toChannel().type,
+                        failed.showSenderPhone, failed.highlightVerificationCode
+                    )
+                    if (result.first) {
+                        LogStore.append(context, "延迟重试转发成功 -> ${failed.channelName}")
+                        synchronized(failedMessageLock) {
+                            failedMessages.removeIf { it == failed }
+                            saveFailedMessages(context)
+                        }
+                    } else {
+                        LogStore.append(context, "延迟重试仍失败 -> ${failed.channelName} | 原因: ${result.second}")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "延迟重试异常", e)
+                } finally {
+                    scheduledRetries.remove(failed.channelTarget + "_" + failed.timestamp)
+                }
+            }, Constants.INITIAL_RETRY_BACKOFF_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+
+            scheduledRetries[failed.channelTarget + "_" + failed.timestamp] = future
+        }
+
         @JvmStatic
         fun retryFailedMessages(context: Context) {
             loadFailedMessagesIfNeeded(context)
+            val toRetry: List<FailedMessage>
             synchronized(failedMessageLock) {
                 if (failedMessages.isEmpty()) return
-
-                val toRetry = failedMessages.filter { it.retryCount < Constants.MAX_RETRY_ATTEMPTS }
-                failedMessages.clear()
-
-                toRetry.forEach { failed ->
-                    executor.execute {
-                        try {
-                            val receiver = SmsReceiver()
-                            val channel = failed.toChannel()
-                            val result = receiver.sendToWebhook(failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
-                            if (result.first) {
-                                LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
-                            } else {
-                                if (failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS) {
-                                    failedMessages.add(failed.copy(retryCount = failed.retryCount + 1))
-                                } else {
-                                    LogStore.append(context, "重试转发失败（已达最大次数）-> ${failed.channelName} | 原因: ${result.second}")
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "重试失败", e)
-                        }
-                    }
-                }
-                saveFailedMessages(context)
+                toRetry = failedMessages.toList()
             }
+
+            toRetry.forEach { failed ->
+                scheduleRetry(context, failed)
+            }
+            LogStore.append(context, "已调度 ${toRetry.size} 条延迟重试")
         }
     }
 
@@ -352,12 +368,13 @@ class SmsReceiver : BroadcastReceiver() {
                                 if (success) {
                                     LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                 } else {
-                                    // 添加到失败队列等待网络恢复时重试
+                                    val failed = FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now)
                                     synchronized(failedMessageLock) {
                                         if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
-                                            failedMessages.add(FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now))
+                                            failedMessages.add(failed)
                                         }
                                     }
+                                    scheduleRetry(context, failed)
                                 }
                             }
                         } finally {

@@ -66,10 +66,10 @@ object LogStore {
         FileOutputStream(file, false).use { fos ->
             OutputStreamWriter(fos, "UTF-8").use { writer ->
                 writer.write(line)
-                writer.write('\n')
+                writer.write("\n")
                 for (existing in existingLines) {
                     writer.write(existing)
-                    writer.write('\n')
+                    writer.write("\n")
                 }
             }
         }

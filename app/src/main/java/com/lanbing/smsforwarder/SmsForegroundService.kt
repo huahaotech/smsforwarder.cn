@@ -347,6 +347,7 @@ class SmsForegroundService : Service() {
         super.onCreate()
         createChannel()
         refreshBatteryConfig()
+        startFailedMessageDispatcher()
         try {
             val filter = IntentFilter().apply {
                 addAction(ACTION_UPDATE)
@@ -394,6 +395,22 @@ class SmsForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG_BATTERY, "初始化充电状态失败", t)
         }
+    }
+
+    private val dispatcherExecutor = Executors.newSingleThreadScheduledExecutor()
+    private var dispatcherStarted = false
+
+    private fun startFailedMessageDispatcher() {
+        if (dispatcherStarted) return
+        dispatcherStarted = true
+        dispatcherExecutor.scheduleAtFixedRate({
+            try {
+                SmsReceiver.retryFailedMessages(applicationContext)
+            } catch (t: Throwable) {
+                Log.w(TAG, "失败消息调度异常", t)
+            }
+        }, 10, 60, java.util.concurrent.TimeUnit.SECONDS)
+        LogStore.append(this, "失败消息调度器已启动（每60秒检查一次）")
     }
 
     private fun createChannel() {
@@ -589,6 +606,7 @@ class SmsForegroundService : Service() {
         super.onDestroy()
         try { unregisterReceiver(updateReceiver) } catch (e: Exception) { /* ignore */ }
         try { unregisterReceiver(batteryReceiver) } catch (e: Exception) { /* ignore */ }
+        dispatcherExecutor.shutdownNow()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
