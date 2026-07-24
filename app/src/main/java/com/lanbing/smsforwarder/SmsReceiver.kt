@@ -285,8 +285,8 @@ class SmsReceiver : BroadcastReceiver() {
         val receiverPhoneNumber = if (showReceiverPhone) getReceiverPhoneNumber(context, subscriptionId) else null
 
         // 消息去重检查
-        val messageKey = "${sender}_${fullMessage.hashCode()}_${timestamp}"
         val now = System.currentTimeMillis()
+        val messageKey = "${sender}_${fullMessage.hashCode()}_${now}"
         synchronized(recentMessages) {
             cleanupRecentMessages()
             val lastTime = recentMessages[messageKey]
