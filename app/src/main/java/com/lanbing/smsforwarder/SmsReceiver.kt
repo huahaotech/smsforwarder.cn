@@ -30,7 +30,6 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 /**
@@ -52,7 +51,6 @@ class SmsReceiver : BroadcastReceiver() {
             .callTimeout(Constants.CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .connectTimeout(Constants.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(Constants.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(Constants.WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
 
         // 固定线程池避免线程爆炸
@@ -66,7 +64,6 @@ class SmsReceiver : BroadcastReceiver() {
         // 失败消息队列，等待网络恢复时重试
         private val failedMessages = mutableListOf<FailedMessage>()
         private val failedMessageLock = Object()
-        private var failedMessagesLoaded = false
 
         data class FailedMessage(
             val channelId: String,
@@ -143,10 +140,6 @@ class SmsReceiver : BroadcastReceiver() {
 
         private fun saveFailedMessages(context: Context) {
             synchronized(failedMessageLock) {
-                if (failedMessages.isEmpty()) {
-                    failedMessagesLoaded = false
-                    return
-                }
                 try {
                     val file = failedMessagesFile(context)
                     val arr = JSONArray()
@@ -158,20 +151,16 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
-        private fun loadFailedMessagesIfNeeded(context: Context) {
-            if (failedMessagesLoaded) return
+        private fun loadFailedMessages(context: Context) {
             synchronized(failedMessageLock) {
-                if (failedMessagesLoaded) return
                 try {
                     val file = failedMessagesFile(context)
-                    if (file.exists()) {
-                        val arr = JSONArray(file.readText())
-                        failedMessages.clear()
-                        for (i in 0 until arr.length()) {
-                            failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
-                        }
+                    if (!file.exists()) return
+                    val arr = JSONArray(file.readText())
+                    failedMessages.clear()
+                    for (i in 0 until arr.length()) {
+                        failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
                     }
-                    failedMessagesLoaded = true
                 } catch (t: Throwable) {
                     Log.e(TAG, "加载失败消息失败", t)
                 }
@@ -185,53 +174,38 @@ class SmsReceiver : BroadcastReceiver() {
             recentMessages.entries.removeIf { (now - it.value) > Constants.DUPLICATE_WINDOW_MS * 2 }
         }
 
-        private val scheduledRetries = ConcurrentHashMap<String, ScheduledFuture<*>>()
-        private val scheduler = Executors.newScheduledThreadPool(1)
-
-        @JvmStatic
-        fun scheduleRetry(context: Context, failed: FailedMessage) {
-            val existing = scheduledRetries[failed.channelTarget + "_" + failed.timestamp]
-            if (existing != null && !existing.isDone) return
-
-            val future = scheduler.schedule({
-                try {
-                    val result = SmsReceiver().sendToWebhook(
-                        failed.channelTarget, failed.sender, failed.content,
-                        failed.receiverPhoneNumber, failed.toChannel().type,
-                        failed.showSenderPhone, failed.highlightVerificationCode
-                    )
-                    if (result.first) {
-                        LogStore.append(context, "延迟重试转发成功 -> ${failed.channelName}")
-                        synchronized(failedMessageLock) {
-                            failedMessages.removeIf { it == failed }
-                            saveFailedMessages(context)
-                        }
-                    } else {
-                        LogStore.append(context, "延迟重试仍失败 -> ${failed.channelName} | 原因: ${result.second}")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "延迟重试异常", e)
-                } finally {
-                    scheduledRetries.remove(failed.channelTarget + "_" + failed.timestamp)
-                }
-            }, Constants.INITIAL_RETRY_BACKOFF_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-
-            scheduledRetries[failed.channelTarget + "_" + failed.timestamp] = future
-        }
-
+        // 供 NetworkChangeReceiver 调用，重试失败的消息
         @JvmStatic
         fun retryFailedMessages(context: Context) {
-            loadFailedMessagesIfNeeded(context)
-            val toRetry: List<FailedMessage>
+            loadFailedMessages(context)
             synchronized(failedMessageLock) {
                 if (failedMessages.isEmpty()) return
-                toRetry = failedMessages.toList()
-            }
 
-            toRetry.forEach { failed ->
-                scheduleRetry(context, failed)
+                val toRetry = failedMessages.filter { it.retryCount < Constants.MAX_RETRY_ATTEMPTS }
+                failedMessages.clear()
+
+                toRetry.forEach { failed ->
+                    executor.execute {
+                        try {
+                            val receiver = SmsReceiver()
+                            val channel = failed.toChannel()
+                            val result = receiver.sendToWebhook(failed.channelTarget, failed.sender, failed.content, failed.receiverPhoneNumber, channel.type, failed.showSenderPhone, failed.highlightVerificationCode)
+                            if (result.first) {
+                                LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
+                            } else {
+                                if (failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS) {
+                                    failedMessages.add(failed.copy(retryCount = failed.retryCount + 1))
+                                } else {
+                                    LogStore.append(context, "重试转发失败（已达最大次数）-> ${failed.channelName} | 原因: ${result.second}")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "重试失败", e)
+                        }
+                    }
+                }
+                saveFailedMessages(context)
             }
-            LogStore.append(context, "已调度 ${toRetry.size} 条延迟重试")
         }
     }
 
@@ -301,8 +275,8 @@ class SmsReceiver : BroadcastReceiver() {
         val receiverPhoneNumber = if (showReceiverPhone) getReceiverPhoneNumber(context, subscriptionId) else null
 
         // 消息去重检查
+        val messageKey = "${sender}_${fullMessage.hashCode()}"
         val now = System.currentTimeMillis()
-        val messageKey = "${sender}_${fullMessage.hashCode()}_${now}"
         synchronized(recentMessages) {
             cleanupRecentMessages()
             val lastTime = recentMessages[messageKey]
@@ -326,8 +300,8 @@ class SmsReceiver : BroadcastReceiver() {
 
         if (matched.isEmpty()) return
 
-        // 加载持久化的失败消息（懒加载）
-        loadFailedMessagesIfNeeded(context)
+        // 加载持久化的失败消息
+        loadFailedMessages(context)
 
         val pendingResult = goAsync()
 
@@ -368,13 +342,12 @@ class SmsReceiver : BroadcastReceiver() {
                                 if (success) {
                                     LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                 } else {
-                                    val failed = FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now)
+                                    // 添加到失败队列等待网络恢复时重试
                                     synchronized(failedMessageLock) {
                                         if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
-                                            failedMessages.add(failed)
+                                            failedMessages.add(FailedMessage.fromChannel(ch, sender, fullMessage, receiverPhoneNumber, showSenderPhone, highlightVerificationCode, now))
                                         }
                                     }
-                                    scheduleRetry(context, failed)
                                 }
                             }
                         } finally {
@@ -502,7 +475,12 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     internal fun sendToWebhook(webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Pair<Boolean, String> {
-        val json = ChannelMessageBuilder.buildFullMessage(type, sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+        val json = when (type) {
+            ChannelType.FEISHU -> buildFeishuMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+            ChannelType.WECHAT -> buildWechatMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+            ChannelType.DINGTALK -> buildDingtalkMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+            ChannelType.GENERIC_WEBHOOK -> buildGenericMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+        }
 
         val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val req = Request.Builder()
@@ -532,13 +510,109 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-        private val urlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
+    /**
+     * 从短信内容中提取验证码
+     * 匹配常见验证码格式：4-8位数字，可能带有"验证码"、"校验码"等关键词
+     */
+    private fun extractVerificationCode(content: String): String? {
+        // 常见的验证码关键词
+        val keywords = listOf("验证码", "校验码", "动态码", "验证 code", "verification code", "verify code")
+        val hasKeyword = keywords.any { content.contains(it, ignoreCase = true) }
 
-        private fun isValidUrl(s: String): Boolean {
-            return urlRegex.matches(s)
+        // 优先匹配：关键词后紧跟的 4-8 位数字
+        if (hasKeyword) {
+            // 模式1：关键词后面直接跟数字（如"验证码是123456"）
+            val pattern1 = Regex("""(?:验证码|校验码|动态码|验证|verification|verify)[^\d]*(\d{4,8})""", RegexOption.IGNORE_CASE)
+            pattern1.find(content)?.let { return it.groupValues[1] }
+
+            // 模式2：关键词附近的数字（关键词后20字符内）
+            val pattern2 = Regex("""(?:验证码|校验码|动态码|验证|verification|verify).{0,30}?(\d{4,8})""", RegexOption.IGNORE_CASE)
+            pattern2.find(content)?.let { return it.groupValues[1] }
         }
 
-        private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {
+        // 匹配独立的4-8位数字（作为备选）
+        val pattern3 = Regex("""\b(\d{4,8})\b""")
+        val matches = pattern3.findAll(content).map { it.groupValues[1] }.toList()
+
+        // 如果有多个匹配，返回最长的那个（更可能是验证码）
+        if (matches.isNotEmpty()) {
+            return matches.maxByOrNull { it.length }
+        }
+
+        return null
+    }
+
+    /**
+     * 构建消息内容，突出显示验证码
+     */
+    private fun buildMessageWithHighlightedCode(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): String {
+        val parts = mutableListOf<String>()
+        val code = if (highlightVerificationCode) extractVerificationCode(content) else null
+
+        if (code != null) {
+            parts.add("验证码: $code")
+        }
+        if (receiverPhoneNumber != null) {
+            parts.add("本机: $receiverPhoneNumber")
+        }
+        if (showSenderPhone) {
+            parts.add("来自: $sender")
+        }
+        parts.add(content)
+
+        return parts.joinToString("\n")
+    }
+
+    private fun buildWechatMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
+        val json = JSONObject()
+        json.put("msgtype", "text")
+        val text = JSONObject()
+        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        json.put("text", text)
+        return json
+    }
+
+    private fun buildDingtalkMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
+        val json = JSONObject()
+        json.put("msgtype", "text")
+        val text = JSONObject()
+        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        json.put("text", text)
+        return json
+    }
+
+    private fun buildFeishuMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
+        val json = JSONObject()
+        json.put("msg_type", "text")
+        val text = JSONObject()
+        text.put("text", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        json.put("content", text)
+        return json
+    }
+
+    private fun buildGenericMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
+        val json = JSONObject()
+        if (showSenderPhone) {
+            json.put("sender", sender)
+        }
+        if (receiverPhoneNumber != null) {
+            json.put("receiver", receiverPhoneNumber)
+        }
+        json.put("content", content)
+        if (highlightVerificationCode) {
+            json.put("verificationCode", extractVerificationCode(content))
+        }
+        json.put("timestamp", System.currentTimeMillis())
+        return json
+    }
+
+    private val urlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
+
+    private fun isValidUrl(s: String): Boolean {
+        return urlRegex.matches(s)
+    }
+
+    private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {
         val arrStr = prefs.getString(Constants.PREF_CHANNELS, "[]") ?: "[]"
         return try {
             val arr = org.json.JSONArray(arrStr)

@@ -22,10 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object LogStore {
-    private val dateFormat = object : ThreadLocal<SimpleDateFormat>() {
-        override fun initialValue(): SimpleDateFormat =
-            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-    }
+    private val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    private val lock = Any()
 
     private fun logFile(context: Context): File {
         val dir = context.filesDir
@@ -36,42 +34,57 @@ object LogStore {
     fun append(context: Context, text: String) {
         try {
             val file = logFile(context)
-            val time = dateFormat.get()!!.format(Date())
+            val time = sdf.format(Date())
             val line = "[$time] ${if (text.length > Constants.MAX_LOG_LINE_LENGTH) text.take(Constants.MAX_LOG_LINE_LENGTH) + "…(截断)" else text}"
-            synchronized(this) {
-                appendWithHeadInsert(file, line)
+            synchronized(lock) {
+                // 优化：使用 RandomAccessFile 或分批读取大文件
+                if (file.exists() && file.length() > 1024 * 1024) { // 如果文件超过 1MB，分批处理
+                    appendLargeFile(file, line)
+                } else {
+                    appendSmallFile(file, line)
+                }
             }
         } catch (t: Throwable) {
             t.printStackTrace()
         }
     }
 
-    private fun appendWithHeadInsert(file: File, line: String) {
-        val maxKeep = Constants.MAX_LOG_ENTRIES - 1
-        val existingLines = ArrayList<String>(maxKeep)
+    private fun appendSmallFile(file: File, line: String) {
+        // 小文件保持原有逻辑
+        val existing = if (file.exists()) file.readText() else ""
+        val newContent = line + "\n" + existing
+        val lines = newContent.lines().filter { it.isNotBlank() }
+        val limited = if (lines.size > Constants.MAX_LOG_ENTRIES) lines.take(Constants.MAX_LOG_ENTRIES) else lines
+        file.writeText(limited.joinToString("\n"))
+    }
 
-        if (file.exists() && file.length() > 0) {
-            try {
+    private fun appendLargeFile(file: File, line: String) {
+        // 大文件优化：只读取前 N 行，避免加载整个文件
+        val tempFile = File(file.parentFile, "${file.name}.tmp")
+        try {
+            BufferedWriter(OutputStreamWriter(FileOutputStream(tempFile), "UTF-8")).use { writer ->
+                writer.write(line)
+                writer.newLine()
+                
+                // 读取现有文件的前 MAX_ENTRIES - 1 行
+                var count = 0
                 BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { reader ->
                     var currentLine: String?
-                    while (reader.readLine().also { currentLine = it } != null && existingLines.size < maxKeep) {
+                    while (reader.readLine().also { currentLine = it } != null && count < Constants.MAX_LOG_ENTRIES - 1) {
                         if (currentLine!!.isNotBlank()) {
-                            existingLines.add(currentLine!!)
+                            writer.write(currentLine!!)
+                            writer.newLine()
+                            count++
                         }
                     }
                 }
-            } catch (_: Exception) { }
-        }
-
-        FileOutputStream(file, false).use { fos ->
-            OutputStreamWriter(fos, "UTF-8").use { writer ->
-                writer.write(line)
-                writer.write("\n")
-                for (existing in existingLines) {
-                    writer.write(existing)
-                    writer.write("\n")
-                }
             }
+            // 原子性替换
+            if (tempFile.exists() && file.delete()) {
+                tempFile.renameTo(file)
+            }
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
         }
     }
 
@@ -79,7 +92,7 @@ object LogStore {
         try {
             val file = logFile(context)
             if (!file.exists()) return emptyList()
-            synchronized(this) {
+            synchronized(lock) {
                 val lines = mutableListOf<String>()
                 BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { br ->
                     var line: String? = br.readLine()
@@ -99,7 +112,7 @@ object LogStore {
     fun clear(context: Context) {
         try {
             val file = logFile(context)
-            synchronized(this) {
+            synchronized(lock) {
                 if (file.exists()) file.writeText("")
             }
         } catch (t: Throwable) {
@@ -111,7 +124,7 @@ object LogStore {
         try {
             val file = logFile(context)
             if (!file.exists()) return "暂无日志"
-            synchronized(this) {
+            synchronized(lock) {
                 BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { br ->
                     var line: String?
                     while (br.readLine().also { line = it } != null) {
