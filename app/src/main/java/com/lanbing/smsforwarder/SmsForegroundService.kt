@@ -119,6 +119,7 @@ class SmsForegroundService : Service() {
     }
 
     private var batteryReceiverRegistered = false
+    private var lastNotifState: Boolean? = null
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -556,12 +557,14 @@ class SmsForegroundService : Service() {
 
         try {
             val nm = getSystemService(NotificationManager::class.java)
-            val channel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.getNotificationChannel(Constants.NOTIFICATION_CHANNEL_ID) else null
             val notifAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
-            if (notifAllowed) {
-                LogStore.append(applicationContext, "通知权限已开启")
-            } else {
-                LogStore.append(applicationContext, "通知权限未开启")
+            if (notifAllowed != lastNotifState) {
+                lastNotifState = notifAllowed
+                if (notifAllowed) {
+                    LogStore.append(applicationContext, "通知权限已开启")
+                } else {
+                    LogStore.append(applicationContext, "通知权限未开启")
+                }
             }
         } catch (t: Throwable) {
             LogStore.append(applicationContext, "检查通知权限失败")
