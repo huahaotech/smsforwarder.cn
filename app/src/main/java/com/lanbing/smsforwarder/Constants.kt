@@ -71,4 +71,5 @@ object Constants {
     const val CALL_TIMEOUT_SECONDS = 20L
     const val CONNECT_TIMEOUT_SECONDS = 10L
     const val READ_TIMEOUT_SECONDS = 20L
+    const val WRITE_TIMEOUT_SECONDS = 30L
 }

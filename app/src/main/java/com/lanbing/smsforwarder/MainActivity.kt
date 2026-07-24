@@ -320,11 +320,16 @@ fun SmsForwarderApp(
     
     DisposableEffect(Unit) {
         val logFile = File(context.filesDir, Constants.LOG_FILE_NAME)
+        var lastLogUpdateTime = 0L
         @Suppress("DEPRECATION")
         val observer = object : FileObserver(logFile.parent ?: context.filesDir.absolutePath, FileObserver.MODIFY or FileObserver.CREATE) {
             override fun onEvent(event: Int, path: String?) {
                 if (path == Constants.LOG_FILE_NAME && event and (MODIFY or CREATE) != 0) {
-                    logs = LogStore.readAll(context)
+                    val now = System.currentTimeMillis()
+                    if (now - lastLogUpdateTime > 500) {
+                        lastLogUpdateTime = now
+                        logs = LogStore.readAll(context)
+                    }
                 }
             }
         }

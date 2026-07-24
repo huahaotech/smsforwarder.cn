@@ -51,6 +51,7 @@ class SmsReceiver : BroadcastReceiver() {
             .callTimeout(Constants.CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .connectTimeout(Constants.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(Constants.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(Constants.WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
 
         // 固定线程池避免线程爆炸
@@ -64,6 +65,7 @@ class SmsReceiver : BroadcastReceiver() {
         // 失败消息队列，等待网络恢复时重试
         private val failedMessages = mutableListOf<FailedMessage>()
         private val failedMessageLock = Object()
+        private var failedMessagesLoaded = false
 
         data class FailedMessage(
             val channelId: String,
@@ -140,6 +142,10 @@ class SmsReceiver : BroadcastReceiver() {
 
         private fun saveFailedMessages(context: Context) {
             synchronized(failedMessageLock) {
+                if (failedMessages.isEmpty()) {
+                    failedMessagesLoaded = false
+                    return
+                }
                 try {
                     val file = failedMessagesFile(context)
                     val arr = JSONArray()
@@ -151,16 +157,20 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
-        private fun loadFailedMessages(context: Context) {
+        private fun loadFailedMessagesIfNeeded(context: Context) {
+            if (failedMessagesLoaded) return
             synchronized(failedMessageLock) {
+                if (failedMessagesLoaded) return
                 try {
                     val file = failedMessagesFile(context)
-                    if (!file.exists()) return
-                    val arr = JSONArray(file.readText())
-                    failedMessages.clear()
-                    for (i in 0 until arr.length()) {
-                        failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
+                    if (file.exists()) {
+                        val arr = JSONArray(file.readText())
+                        failedMessages.clear()
+                        for (i in 0 until arr.length()) {
+                            failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
+                        }
                     }
+                    failedMessagesLoaded = true
                 } catch (t: Throwable) {
                     Log.e(TAG, "加载失败消息失败", t)
                 }
@@ -177,7 +187,7 @@ class SmsReceiver : BroadcastReceiver() {
         // 供 NetworkChangeReceiver 调用，重试失败的消息
         @JvmStatic
         fun retryFailedMessages(context: Context) {
-            loadFailedMessages(context)
+            loadFailedMessagesIfNeeded(context)
             synchronized(failedMessageLock) {
                 if (failedMessages.isEmpty()) return
 
@@ -275,7 +285,7 @@ class SmsReceiver : BroadcastReceiver() {
         val receiverPhoneNumber = if (showReceiverPhone) getReceiverPhoneNumber(context, subscriptionId) else null
 
         // 消息去重检查
-        val messageKey = "${sender}_${fullMessage.hashCode()}"
+        val messageKey = "${sender}_${fullMessage.hashCode()}_${timestamp}"
         val now = System.currentTimeMillis()
         synchronized(recentMessages) {
             cleanupRecentMessages()
@@ -300,8 +310,8 @@ class SmsReceiver : BroadcastReceiver() {
 
         if (matched.isEmpty()) return
 
-        // 加载持久化的失败消息
-        loadFailedMessages(context)
+        // 加载持久化的失败消息（懒加载）
+        loadFailedMessagesIfNeeded(context)
 
         val pendingResult = goAsync()
 

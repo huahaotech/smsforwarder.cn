@@ -34,13 +34,11 @@ import androidx.core.content.ContextCompat
 import android.app.PendingIntent
 import android.provider.Settings
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 class SmsForegroundService : Service() {
 
@@ -53,6 +51,36 @@ class SmsForegroundService : Service() {
         
         // 固定线程池避免线程爆炸
         private val executor = Executors.newFixedThreadPool(Constants.THREAD_POOL_SIZE)
+
+        @Volatile
+        private var cachedConfig = BatteryConfig()
+    }
+
+    data class BatteryConfig(
+        val batteryEnabled: Boolean = false,
+        val chargingReminderEnabled: Boolean = false,
+        val lowBatteryReminderEnabled: Boolean = true,
+        val highBatteryReminderEnabled: Boolean = true,
+        val lowThreshold: Int = Constants.DEFAULT_LOW_BATTERY_THRESHOLD,
+        val highThreshold: Int = Constants.DEFAULT_HIGH_BATTERY_THRESHOLD,
+        val batteryReminderChannelId: String = ""
+    )
+
+    private fun refreshBatteryConfig() {
+        try {
+            val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            cachedConfig = BatteryConfig(
+                batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false),
+                chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false),
+                lowBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true),
+                highBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true),
+                lowThreshold = prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD),
+                highThreshold = prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD),
+                batteryReminderChannelId = prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, "") ?: ""
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "刷新电量配置失败", t)
+        }
     }
 
     private val updateReceiver = object : BroadcastReceiver() {
@@ -64,6 +92,7 @@ class SmsForegroundService : Service() {
                     LogStore.append(applicationContext, "收到通知停止服务请求，服务已停止")
                     return
                 }
+                refreshBatteryConfig()
                 updateNotification()
             } catch (t: Throwable) {
                 Log.w(TAG, "更新通知失败", t)
@@ -78,19 +107,11 @@ class SmsForegroundService : Service() {
                 val action = intent.action
                 if (action != Intent.ACTION_BATTERY_CHANGED) return
 
-                val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-                val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
-                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
-                
-                if (!batteryEnabled && !chargingReminderEnabled) {
+                val config = cachedConfig
+                if (!config.batteryEnabled && !config.chargingReminderEnabled) {
                     Log.d(TAG_BATTERY, "所有电量提醒未开启，已跳过")
                     return
                 }
-
-                val lowBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)
-                val highBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)
-                val lowThreshold = prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)
-                val highThreshold = prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)
 
                 val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
                 val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
@@ -100,14 +121,15 @@ class SmsForegroundService : Service() {
                 }
 
                 val batteryPercent = (level * 100 / scale)
+                val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
                 val lastLowRemind = prefs.getInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, -1)
                 val lastHighRemind = prefs.getInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, -1)
 
                 val phoneInfo = getSimPhoneInfo(context, prefs)
 
                 // 低电量提醒
-                if (batteryEnabled && lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
-                    if (lastLowRemind == -1 || lastLowRemind > lowThreshold) {
+                if (config.batteryEnabled && config.lowBatteryReminderEnabled && batteryPercent <= config.lowThreshold) {
+                    if (lastLowRemind == -1 || lastLowRemind > config.lowThreshold) {
                         var message = "【电量提醒】当前电量：$batteryPercent%，电量较低，请及时充电"
                         if (phoneInfo.isNotEmpty()) {
                             message += "\n设备：$phoneInfo"
@@ -116,15 +138,15 @@ class SmsForegroundService : Service() {
                         prefs.edit().putInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, batteryPercent).apply()
                         LogStore.append(context, "电量提醒：低电量 $batteryPercent%")
                     }
-                } else if (batteryEnabled) {
+                } else if (config.batteryEnabled) {
                     if (lastLowRemind != -1) {
                         prefs.edit().remove(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL).apply()
                     }
                 }
 
                 // 高电量提醒
-                if (batteryEnabled && highBatteryReminderEnabled && batteryPercent >= highThreshold) {
-                    if (lastHighRemind == -1 || lastHighRemind < highThreshold) {
+                if (config.batteryEnabled && config.highBatteryReminderEnabled && batteryPercent >= config.highThreshold) {
+                    if (lastHighRemind == -1 || lastHighRemind < config.highThreshold) {
                         var message = "【电量提醒】当前电量：$batteryPercent%，电量充足"
                         if (phoneInfo.isNotEmpty()) {
                             message += "\n设备：$phoneInfo"
@@ -133,14 +155,14 @@ class SmsForegroundService : Service() {
                         prefs.edit().putInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, batteryPercent).apply()
                         LogStore.append(context, "电量提醒：高电量 $batteryPercent%")
                     }
-                } else if (batteryEnabled) {
+                } else if (config.batteryEnabled) {
                     if (lastHighRemind != -1) {
                         prefs.edit().remove(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL).apply()
                     }
                 }
 
                 // 充电状态变化监测（独立于电量提醒主开关）
-                if (chargingReminderEnabled) {
+                if (config.chargingReminderEnabled) {
                     val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
                     val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
                     val isCharging = plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
@@ -177,14 +199,6 @@ class SmsForegroundService : Service() {
         }
     }
 
-    private val httpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-    }
-
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
     private fun sendBatteryReminder(context: Context, message: String) {
@@ -197,17 +211,16 @@ class SmsForegroundService : Service() {
                     return@execute
                 }
 
-                val reminderChannelId = prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, null)
-                val targetChannels = if (reminderChannelId.isNullOrEmpty()) {
-                    channels
-                } else {
-                    val filtered = channels.filter { it.id == reminderChannelId }
+                val targetChannels = if (cachedConfig.batteryReminderChannelId.isNotEmpty()) {
+                    val filtered = channels.filter { it.id == cachedConfig.batteryReminderChannelId }
                     if (filtered.isEmpty()) {
                         LogStore.append(context, "电量提醒：指定的通道不存在，已跳过")
                         channels
                     } else {
                         filtered
                     }
+                } else {
+                    channels
                 }
 
                 if (targetChannels.isEmpty()) {
@@ -229,7 +242,7 @@ class SmsForegroundService : Service() {
                             .post(body)
                             .build()
 
-                        httpClient.newCall(request).execute().use { response ->
+                        SmsReceiver.client.newCall(request).execute().use { response ->
                             if (response.isSuccessful) {
                                 LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
                             } else {
@@ -371,6 +384,7 @@ class SmsForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        refreshBatteryConfig()
         try {
             val filter = IntentFilter().apply {
                 addAction(ACTION_UPDATE)
