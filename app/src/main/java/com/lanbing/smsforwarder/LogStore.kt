@@ -47,34 +47,31 @@ object LogStore {
     }
 
     private fun appendWithHeadInsert(file: File, line: String) {
-        val tempFile = File(file.parentFile, "${file.name}.tmp")
-        try {
-            BufferedWriter(OutputStreamWriter(FileOutputStream(tempFile), "UTF-8")).use { writer ->
-                writer.write(line)
-                writer.newLine()
+        val maxKeep = Constants.MAX_LOG_ENTRIES - 1
+        val existingLines = ArrayList<String>(maxKeep)
 
-                if (file.exists() && file.length() > 0) {
-                    val maxKeep = Constants.MAX_LOG_ENTRIES - 1
-                    if (maxKeep > 0) {
-                        var count = 0
-                        BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { reader ->
-                            var currentLine: String?
-                            while (reader.readLine().also { currentLine = it } != null && count < maxKeep) {
-                                if (currentLine!!.isNotBlank()) {
-                                    writer.write(currentLine!!)
-                                    writer.newLine()
-                                    count++
-                                }
-                            }
+        if (file.exists() && file.length() > 0) {
+            try {
+                BufferedReader(InputStreamReader(FileInputStream(file), "UTF-8")).use { reader ->
+                    var currentLine: String?
+                    while (reader.readLine().also { currentLine = it } != null && existingLines.size < maxKeep) {
+                        if (currentLine!!.isNotBlank()) {
+                            existingLines.add(currentLine!!)
                         }
                     }
                 }
+            } catch (_: Exception) { }
+        }
+
+        FileOutputStream(file, false).use { fos ->
+            OutputStreamWriter(fos, "UTF-8").use { writer ->
+                writer.write(line)
+                writer.write('\n')
+                for (existing in existingLines) {
+                    writer.write(existing)
+                    writer.write('\n')
+                }
             }
-            if (tempFile.exists() && file.delete()) {
-                tempFile.renameTo(file)
-            }
-        } finally {
-            if (tempFile.exists()) tempFile.delete()
         }
     }
 
