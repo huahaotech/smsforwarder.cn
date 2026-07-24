@@ -61,6 +61,7 @@ object Constants {
     const val PREF_LAST_LOW_BATTERY_REMIND_LEVEL = "last_low_battery_remind_level"
     const val PREF_LAST_HIGH_BATTERY_REMIND_LEVEL = "last_high_battery_remind_level"
     const val PREF_LAST_CHARGING_STATE = "last_charging_state"
+    const val PREF_LAST_CHARGING_STATE_INITIALIZED = "last_charging_state_initialized"
     const val PREF_BATTERY_REMINDER_CHANNEL_ID = "battery_reminder_channel_id"
     const val DEFAULT_LOW_BATTERY_THRESHOLD = 10
     const val DEFAULT_HIGH_BATTERY_THRESHOLD = 90

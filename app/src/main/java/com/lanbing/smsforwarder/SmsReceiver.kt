@@ -28,8 +28,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.MalformedURLException
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -88,7 +86,7 @@ class SmsReceiver : BroadcastReceiver() {
                 obj.put("channelTarget", channelTarget)
                 obj.put("sender", sender)
                 obj.put("content", content)
-                obj.put("receiverPhoneNumber", receiverPhoneNumber)
+                if (receiverPhoneNumber != null) obj.put("receiverPhoneNumber", receiverPhoneNumber)
                 obj.put("showSenderPhone", showSenderPhone)
                 obj.put("highlightVerificationCode", highlightVerificationCode)
                 obj.put("timestamp", timestamp)
@@ -148,8 +146,8 @@ class SmsReceiver : BroadcastReceiver() {
                     failedMessages.take(Constants.MAX_FAILED_MESSAGES).forEach { arr.put(it.toJSONObject()) }
                     file.writeText(arr.toString())
                 } catch (t: Throwable) {
-            Log.e(TAG, "保存失败消息失败", t)
-        }
+                    Log.e(TAG, "保存失败消息失败", t)
+                }
             }
         }
 
@@ -164,8 +162,8 @@ class SmsReceiver : BroadcastReceiver() {
                         failedMessages.add(FailedMessage.fromJSONObject(arr.getJSONObject(i)))
                     }
                 } catch (t: Throwable) {
-            Log.e(TAG, "加载失败消息失败", t)
-        }
+                    Log.e(TAG, "加载失败消息失败", t)
+                }
             }
         }
 
@@ -597,7 +595,9 @@ class SmsReceiver : BroadcastReceiver() {
         if (showSenderPhone) {
             json.put("sender", sender)
         }
-        json.put("receiver", receiverPhoneNumber)
+        if (receiverPhoneNumber != null) {
+            json.put("receiver", receiverPhoneNumber)
+        }
         json.put("content", content)
         if (highlightVerificationCode) {
             json.put("verificationCode", extractVerificationCode(content))
@@ -606,13 +606,10 @@ class SmsReceiver : BroadcastReceiver() {
         return json
     }
 
+    private val urlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
+
     private fun isValidUrl(s: String): Boolean {
-        return try {
-            val url = URL(s)
-            (url.protocol == "http" || url.protocol == "https") && url.host.isNotBlank()
-        } catch (e: MalformedURLException) {
-            false
-        }
+        return urlRegex.matches(s)
     }
 
     private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {

@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
     private var onConfigChanged: (() -> Unit)? = null
     private lateinit var configImportLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
-    private var pendingScanResult: String? = null
+    private var pendingImportData: String? = null
     private val showImportPreviewDialog = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
                     val jsonStr = inputStream?.bufferedReader()?.use { it.readText() }
                     inputStream?.close()
                     if (jsonStr != null) {
-                        pendingScanResult = jsonStr
+                        pendingImportData = jsonStr
                         showImportPreviewDialog.value = true
                     } else {
                         Toast.makeText(this, "读取文件失败", Toast.LENGTH_SHORT).show()
@@ -172,26 +172,26 @@ class MainActivity : ComponentActivity() {
                         configImportLauncher.launch("application/json")
                     },
                     onPasteImport = { text ->
-                        pendingScanResult = text
+                        pendingImportData = text
                         showImportPreviewDialog.value = true
                     },
                     onDismissPreviewDialog = {
-                        pendingScanResult = null
+                        pendingImportData = null
                         showImportPreviewDialog.value = false
                     },
                     onConfirmImport = {
-                        val jsonStr = pendingScanResult
+                        val jsonStr = pendingImportData
                         if (jsonStr != null) {
                             importConfigFromJson(this, jsonStr) {
                                 onPermissionChanged?.invoke()
                                 onConfigChanged?.invoke()
                             }
                         }
-                        pendingScanResult = null
+                        pendingImportData = null
                         showImportPreviewDialog.value = false
                     },
                     showImportPreviewDialog = showImportPreviewDialog.value,
-                    pendingScanResult = pendingScanResult
+                    pendingImportData = pendingImportData
                 )
             }
         }
@@ -229,13 +229,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private val webhookUrlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
+
 fun isValidWebhookUrl(url: String): Boolean {
-    return try {
-        val u = java.net.URL(url)
-        (u.protocol == "http" || u.protocol == "https") && u.host.isNotBlank()
-    } catch (e: java.net.MalformedURLException) {
-        false
-    }
+    return webhookUrlRegex.matches(url)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -250,7 +247,7 @@ fun SmsForwarderApp(
     onDismissPreviewDialog: () -> Unit = {},
     onConfirmImport: () -> Unit = {},
     showImportPreviewDialog: Boolean = false,
-    pendingScanResult: String? = null,
+    pendingImportData: String? = null,
     onImportFromFile: () -> Unit = {},
     onPasteImport: (String) -> Unit = {}
 ) {
@@ -1176,9 +1173,9 @@ fun SmsForwarderApp(
     }
 
     // 导入配置预览弹窗
-    if (showImportPreviewDialog && pendingScanResult != null) {
+    if (showImportPreviewDialog && pendingImportData != null) {
         ImportPreviewDialog(
-            jsonStr = pendingScanResult!!,
+            jsonStr = pendingImportData!!,
             onConfirm = onConfirmImport,
             onDismiss = onDismissPreviewDialog
         )
@@ -4218,11 +4215,11 @@ private fun generateConfigJson(
         put("lowBatteryReminderEnabled", lowBatteryReminderEnabled)
         put("highBatteryReminderEnabled", highBatteryReminderEnabled)
         put("chargingReminderEnabled", chargingReminderEnabled)
-        put("batteryReminderChannelId", batteryReminderChannelId ?: JSONObject.NULL)
+        if (batteryReminderChannelId != null) put("batteryReminderChannelId", batteryReminderChannelId)
         put("lowBatteryThreshold", lowBatteryThreshold)
         put("highBatteryThreshold", highBatteryThreshold)
-        put("customSim1Phone", customSim1Phone ?: JSONObject.NULL)
-        put("customSim2Phone", customSim2Phone ?: JSONObject.NULL)
+        if (customSim1Phone != null) put("customSim1Phone", customSim1Phone)
+        if (customSim2Phone != null) put("customSim2Phone", customSim2Phone)
         put("startOnBoot", startOnBoot)
     }.toString()
 }
@@ -4352,7 +4349,7 @@ internal fun importConfigFromJson(
         editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
         editor.putBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, json.optBoolean("chargingReminderEnabled", true))
-        val reminderChannelId = json.optString("batteryReminderChannelId", "")
+        val reminderChannelId = if (json.isNull("batteryReminderChannelId")) "" else json.optString("batteryReminderChannelId", "")
         if (reminderChannelId.isEmpty()) {
             editor.remove(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID)
         } else {
@@ -4362,14 +4359,14 @@ internal fun importConfigFromJson(
         editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
         editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
         
-        val sim1Phone = json.optString("customSim1Phone", "")
+        val sim1Phone = if (json.isNull("customSim1Phone")) "" else json.optString("customSim1Phone", "")
         if (sim1Phone.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM1_PHONE)
         } else {
             editor.putString(Constants.PREF_CUSTOM_SIM1_PHONE, sim1Phone)
         }
         
-        val sim2Phone = json.optString("customSim2Phone", "")
+        val sim2Phone = if (json.isNull("customSim2Phone")) "" else json.optString("customSim2Phone", "")
         if (sim2Phone.isEmpty()) {
             editor.remove(Constants.PREF_CUSTOM_SIM2_PHONE)
         } else {

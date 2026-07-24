@@ -398,7 +398,7 @@ class SmsForegroundService : Service() {
             val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
             if (!chargingReminderEnabled) return
             
-            val lastStateInitialized = prefs.getBoolean("last_charging_state_initialized", false)
+            val lastStateInitialized = prefs.getBoolean(Constants.PREF_LAST_CHARGING_STATE_INITIALIZED, false)
             if (lastStateInitialized) return
             
             val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -412,7 +412,7 @@ class SmsForegroundService : Service() {
             
             prefs.edit()
                 .putBoolean(Constants.PREF_LAST_CHARGING_STATE, isCharging)
-                .putBoolean("last_charging_state_initialized", true)
+                .putBoolean(Constants.PREF_LAST_CHARGING_STATE_INITIALIZED, true)
                 .apply()
             Log.d(TAG_BATTERY, "初始化充电状态: isCharging=$isCharging")
         } catch (t: Throwable) {
