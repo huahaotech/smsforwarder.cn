@@ -129,7 +129,7 @@ class SmsForegroundService : Service() {
                 val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
                 
                 if (!batteryEnabled && !chargingReminderEnabled) {
-                    LogStore.append(this, "所有电量提醒未开启")
+                    LogStore.append(context, "所有电量提醒未开启")
                     return
                 }
 
