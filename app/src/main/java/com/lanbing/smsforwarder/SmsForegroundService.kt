@@ -230,12 +230,7 @@ class SmsForegroundService : Service() {
 
                 targetChannels.forEach { channel ->
                     try {
-                        val jsonObject = when (channel.type) {
-                            ChannelType.WECHAT -> buildWechatMessage(message)
-                            ChannelType.DINGTALK -> buildDingtalkMessage(message)
-                            ChannelType.FEISHU -> buildFeishuMessage(message)
-                            ChannelType.GENERIC_WEBHOOK -> buildWebhookMessage(message)
-                        }
+                        val jsonObject = ChannelMessageBuilder.buildSimpleMessage(channel.type, message)
                         val body = jsonObject.toString().toRequestBody(JSON)
                         val request = Request.Builder()
                             .url(channel.target)
@@ -280,39 +275,6 @@ class SmsForegroundService : Service() {
         } catch (t: Throwable) {
             emptyList()
         }
-    }
-
-    private fun buildWechatMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("content", message)
-        json.put("msgtype", "text")
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildDingtalkMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("content", message)
-        json.put("msgtype", "text")
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildFeishuMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("text", message)
-        json.put("msg_type", "text")
-        json.put("content", text)
-        return json
-    }
-
-    private fun buildWebhookMessage(message: String): JSONObject {
-        val json = JSONObject()
-        json.put("message", message)
-        return json
     }
 
     private fun getSimPhoneInfo(context: Context, prefs: android.content.SharedPreferences): String {

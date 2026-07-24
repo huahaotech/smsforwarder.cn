@@ -485,12 +485,7 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     internal fun sendToWebhook(webhookUrl: String, sender: String, content: String, receiverPhoneNumber: String?, type: ChannelType, showSenderPhone: Boolean, highlightVerificationCode: Boolean): Pair<Boolean, String> {
-        val json = when (type) {
-            ChannelType.FEISHU -> buildFeishuMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.WECHAT -> buildWechatMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.DINGTALK -> buildDingtalkMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.GENERIC_WEBHOOK -> buildGenericMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-        }
+        val json = ChannelMessageBuilder.buildFullMessage(type, sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
 
         val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val req = Request.Builder()
@@ -520,109 +515,13 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    /**
-     * 从短信内容中提取验证码
-     * 匹配常见验证码格式：4-8位数字，可能带有"验证码"、"校验码"等关键词
-     */
-    private fun extractVerificationCode(content: String): String? {
-        // 常见的验证码关键词
-        val keywords = listOf("验证码", "校验码", "动态码", "验证 code", "verification code", "verify code")
-        val hasKeyword = keywords.any { content.contains(it, ignoreCase = true) }
+        private val urlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
 
-        // 优先匹配：关键词后紧跟的 4-8 位数字
-        if (hasKeyword) {
-            // 模式1：关键词后面直接跟数字（如"验证码是123456"）
-            val pattern1 = Regex("""(?:验证码|校验码|动态码|验证|verification|verify)[^\d]*(\d{4,8})""", RegexOption.IGNORE_CASE)
-            pattern1.find(content)?.let { return it.groupValues[1] }
-
-            // 模式2：关键词附近的数字（关键词后20字符内）
-            val pattern2 = Regex("""(?:验证码|校验码|动态码|验证|verification|verify).{0,30}?(\d{4,8})""", RegexOption.IGNORE_CASE)
-            pattern2.find(content)?.let { return it.groupValues[1] }
+        private fun isValidUrl(s: String): Boolean {
+            return urlRegex.matches(s)
         }
 
-        // 匹配独立的4-8位数字（作为备选）
-        val pattern3 = Regex("""\b(\d{4,8})\b""")
-        val matches = pattern3.findAll(content).map { it.groupValues[1] }.toList()
-
-        // 如果有多个匹配，返回最长的那个（更可能是验证码）
-        if (matches.isNotEmpty()) {
-            return matches.maxByOrNull { it.length }
-        }
-
-        return null
-    }
-
-    /**
-     * 构建消息内容，突出显示验证码
-     */
-    private fun buildMessageWithHighlightedCode(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): String {
-        val parts = mutableListOf<String>()
-        val code = if (highlightVerificationCode) extractVerificationCode(content) else null
-
-        if (code != null) {
-            parts.add("验证码: $code")
-        }
-        if (receiverPhoneNumber != null) {
-            parts.add("本机: $receiverPhoneNumber")
-        }
-        if (showSenderPhone) {
-            parts.add("来自: $sender")
-        }
-        parts.add(content)
-
-        return parts.joinToString("\n")
-    }
-
-    private fun buildWechatMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
-        val json = JSONObject()
-        json.put("msgtype", "text")
-        val text = JSONObject()
-        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildDingtalkMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
-        val json = JSONObject()
-        json.put("msgtype", "text")
-        val text = JSONObject()
-        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildFeishuMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
-        val json = JSONObject()
-        json.put("msg_type", "text")
-        val text = JSONObject()
-        text.put("text", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
-        json.put("content", text)
-        return json
-    }
-
-    private fun buildGenericMessage(sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean): JSONObject {
-        val json = JSONObject()
-        if (showSenderPhone) {
-            json.put("sender", sender)
-        }
-        if (receiverPhoneNumber != null) {
-            json.put("receiver", receiverPhoneNumber)
-        }
-        json.put("content", content)
-        if (highlightVerificationCode) {
-            json.put("verificationCode", extractVerificationCode(content))
-        }
-        json.put("timestamp", System.currentTimeMillis())
-        return json
-    }
-
-    private val urlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
-
-    private fun isValidUrl(s: String): Boolean {
-        return urlRegex.matches(s)
-    }
-
-    private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {
+        private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {
         val arrStr = prefs.getString(Constants.PREF_CHANNELS, "[]") ?: "[]"
         return try {
             val arr = org.json.JSONArray(arrStr)
