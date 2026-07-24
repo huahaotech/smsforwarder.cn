@@ -110,6 +110,7 @@ class SmsForegroundService : Service() {
                 } else {
                     stopPeriodicRetry()
                 }
+                updateBatteryReceiverRegistration()
                 updateNotification()
             } catch (t: Throwable) {
                 Log.w(TAG, "更新通知失败", t)
