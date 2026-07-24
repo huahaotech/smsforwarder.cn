@@ -38,9 +38,8 @@ class NetworkChangeReceiver : BroadcastReceiver() {
 
         // 防抖处理：只在网络从不可用变为可用，且距离上次重试超过 NETWORK_DEBOUNCE_MS 时才重试
         if (isAvailable && !lastNetworkState && (now - lastRetryTime > Constants.NETWORK_DEBOUNCE_MS)) {
-            Log.d(TAG, "网络已恢复，触发失败消息重试")
             lastRetryTime = now
-            // 网络恢复时强制重试所有失败消息，不等待 nextRetryTime
+            LogStore.append(context, "网络已恢复，正在重试失败转发")
             SmsReceiver.retryFailedMessages(context, forceAll = true)
         }
 

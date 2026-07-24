@@ -67,7 +67,7 @@ class BootReceiver : BroadcastReceiver() {
                     LogStore.append(context, "开机启动服务失败: ${t.javaClass.simpleName}")
                 }
             } else {
-                Log.d(TAG, "开机未启动服务: startOnBoot=$startOnBoot enabled=$enabled")
+                LogStore.append(context, "开机检查：未开启开机自启或转发功能")
             }
         } catch (t: Throwable) {
             Log.w(TAG, "onReceive 方法执行失败", t)

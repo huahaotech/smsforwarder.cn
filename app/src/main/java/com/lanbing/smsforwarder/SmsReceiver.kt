@@ -230,7 +230,7 @@ class SmsReceiver : BroadcastReceiver() {
                         }
                     }
                     if (discarded > 0) {
-                        Log.d(TAG, "加载时丢弃 $discarded 条过期或超重试的失败消息")
+                        LogStore.append(context, "已清除 $discarded 条过期或超重试的失败转发")
                         saveFailedMessages(context)
                     } else {
                         // no discards, nothing to save
@@ -259,7 +259,7 @@ class SmsReceiver : BroadcastReceiver() {
                 val toDiscard = failedMessages.filter { it.shouldDiscard() }
                 if (toDiscard.isNotEmpty()) {
                     failedMessages.removeAll(toDiscard)
-                    Log.d(TAG, "丢弃 ${toDiscard.size} 条过期或超重试的失败消息")
+                    LogStore.append(context, "已清除 ${toDiscard.size} 条过期或超重试的失败转发")
                 }
 
                 val toRetry = failedMessages.filter { 
@@ -392,7 +392,7 @@ class SmsReceiver : BroadcastReceiver() {
             cleanupRecentMessages()
             val lastTime = recentMessages[messageKey]
             if (lastTime != null && (now - lastTime) < Constants.DUPLICATE_WINDOW_MS) {
-                Log.d(TAG, "跳过重复消息: 发送者=$sender")
+                LogStore.append(context, "跳过重复短信")
                 return
             }
             recentMessages[messageKey] = now
@@ -603,7 +603,7 @@ class SmsReceiver : BroadcastReceiver() {
                     Log.e(TAG, "通过 TelephonyManager 获取号码失败", e)
                 }
             } else {
-                Log.d(TAG, "没有 READ_PHONE_STATE 权限，无法自动获取本机号码")
+                LogStore.append(context, "缺少 READ_PHONE_STATE 权限，无法自动获取本机号码")
             }
         } catch (e: Exception) {
             Log.e(TAG, "获取本机号码失败", e)

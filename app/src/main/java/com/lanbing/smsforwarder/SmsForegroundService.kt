@@ -80,7 +80,7 @@ class SmsForegroundService : Service() {
             if (!retryStarted) {
                 retryHandler.post(retryRunnable)
                 retryStarted = true
-                Log.d(TAG, "定时重试已启动，间隔: ${Constants.FAILED_MESSAGE_RETRY_INTERVAL_MS}ms")
+                LogStore.append(ctx, "定时重试已启动")
             }
         }
         
@@ -88,7 +88,7 @@ class SmsForegroundService : Service() {
             if (retryStarted) {
                 retryHandler.removeCallbacks(retryRunnable)
                 retryStarted = false
-                Log.d(TAG, "定时重试已停止")
+                LogStore.append(context ?: return, "定时重试已停止")
             }
         }
     }
@@ -129,7 +129,7 @@ class SmsForegroundService : Service() {
                 val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
                 
                 if (!batteryEnabled && !chargingReminderEnabled) {
-                    Log.d(TAG_BATTERY, "所有电量提醒未开启，已跳过")
+                    LogStore.append(this, "所有电量提醒未开启")
                     return
                 }
 
@@ -429,7 +429,7 @@ class SmsForegroundService : Service() {
         try {
             val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
             registerReceiver(batteryReceiver, batteryFilter)
-            Log.d(TAG_BATTERY, "电量监听器已注册")
+            LogStore.append(this, "电量监听器已注册")
             
             // 初始化充电状态，防止服务启动时误触发
             initializeChargingState()
@@ -460,7 +460,7 @@ class SmsForegroundService : Service() {
                 .putBoolean(Constants.PREF_LAST_CHARGING_STATE, isCharging)
                 .putBoolean(Constants.PREF_LAST_CHARGING_STATE_INITIALIZED, true)
                 .apply()
-            Log.d(TAG_BATTERY, "初始化充电状态: isCharging=$isCharging")
+            LogStore.append(this, "初始化充电状态: isCharging=$isCharging")
         } catch (t: Throwable) {
             Log.w(TAG_BATTERY, "初始化充电状态失败", t)
         }
@@ -651,7 +651,6 @@ class SmsForegroundService : Service() {
     private fun updateNotification() {
         val now = System.currentTimeMillis()
         if (now - lastNotificationUpdateTime < Constants.NOTIFICATION_UPDATE_THROTTLE_MS) {
-            Log.d(TAG, "由于节流限制跳过通知更新")
             return
         }
         lastNotificationUpdateTime = now
