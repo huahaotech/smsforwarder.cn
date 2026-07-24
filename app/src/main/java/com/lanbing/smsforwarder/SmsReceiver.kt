@@ -232,6 +232,8 @@ class SmsReceiver : BroadcastReceiver() {
                     if (discarded > 0) {
                         Log.d(TAG, "加载时丢弃 $discarded 条过期或超重试的失败消息")
                         saveFailedMessages(context)
+                    } else {
+                        // no discards, nothing to save
                     }
                 } catch (t: Throwable) {
                     Log.e(TAG, "加载失败消息失败", t)
