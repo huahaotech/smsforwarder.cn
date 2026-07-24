@@ -117,6 +117,8 @@ class SmsForegroundService : Service() {
         }
     }
 
+    private var batteryReceiverRegistered = false
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
@@ -129,7 +131,6 @@ class SmsForegroundService : Service() {
                 val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
                 
                 if (!batteryEnabled && !chargingReminderEnabled) {
-                    LogStore.append(context, "所有电量提醒未开启")
                     return
                 }
 
@@ -426,15 +427,37 @@ class SmsForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG, "注册接收器失败", t)
         }
-        try {
-            val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-            registerReceiver(batteryReceiver, batteryFilter)
-            LogStore.append(this, "电量监听器已注册")
-            
-            // 初始化充电状态，防止服务启动时误触发
-            initializeChargingState()
-        } catch (t: Throwable) {
-            Log.w(TAG_BATTERY, "注册电量监听器失败", t)
+        updateBatteryReceiverRegistration()
+    }
+
+    private fun updateBatteryReceiverRegistration() {
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
+        val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
+        val shouldRegister = batteryEnabled || chargingReminderEnabled
+
+        if (shouldRegister) {
+            if (!batteryReceiverRegistered) {
+                try {
+                    val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+                    registerReceiver(batteryReceiver, batteryFilter)
+                    batteryReceiverRegistered = true
+                    if (chargingReminderEnabled) {
+                        initializeChargingState()
+                    }
+                    LogStore.append(this, "电量监听器已注册")
+                } catch (t: Throwable) {
+                    Log.w(TAG_BATTERY, "注册电量监听器失败", t)
+                }
+            }
+        } else {
+            if (batteryReceiverRegistered) {
+                try {
+                    unregisterReceiver(batteryReceiver)
+                } catch (_: Exception) { /* already unregistered */ }
+                batteryReceiverRegistered = false
+                LogStore.append(this, "电量监听器已注销")
+            }
         }
     }
 
