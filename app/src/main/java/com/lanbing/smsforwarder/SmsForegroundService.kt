@@ -24,7 +24,9 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
@@ -53,6 +55,42 @@ class SmsForegroundService : Service() {
         
         // 固定线程池避免线程爆炸
         private val executor = Executors.newFixedThreadPool(Constants.THREAD_POOL_SIZE)
+        
+        // 定时重试相关
+        private val retryHandler = Handler(Looper.getMainLooper())
+        private val retryRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    val ctx = context
+                    if (ctx != null) {
+                        SmsReceiver.retryFailedMessages(ctx, forceAll = false)
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "定时重试失败", t)
+                }
+                // 继续循环重试
+                retryHandler.postDelayed(this, Constants.FAILED_MESSAGE_RETRY_INTERVAL_MS)
+            }
+        }
+        private var retryStarted = false
+        private var context: Context? = null
+        
+        fun startPeriodicRetry(ctx: Context) {
+            context = ctx.applicationContext
+            if (!retryStarted) {
+                retryHandler.post(retryRunnable)
+                retryStarted = true
+                Log.d(TAG, "定时重试已启动，间隔: ${Constants.FAILED_MESSAGE_RETRY_INTERVAL_MS}ms")
+            }
+        }
+        
+        fun stopPeriodicRetry() {
+            if (retryStarted) {
+                retryHandler.removeCallbacks(retryRunnable)
+                retryStarted = false
+                Log.d(TAG, "定时重试已停止")
+            }
+        }
     }
 
     private val updateReceiver = object : BroadcastReceiver() {
@@ -63,6 +101,14 @@ class SmsForegroundService : Service() {
                     stopSelf()
                     LogStore.append(applicationContext, "收到通知停止服务请求，服务已停止")
                     return
+                }
+                // 检查转发状态，动态调整重试机制
+                val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                val isEnabled = prefs.getBoolean(Constants.PREF_ENABLED, false)
+                if (isEnabled) {
+                    startPeriodicRetry(applicationContext)
+                } else {
+                    stopPeriodicRetry()
                 }
                 updateNotification()
             } catch (t: Throwable) {
@@ -500,6 +546,14 @@ class SmsForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG, "额外通知失败", t)
         }
+
+        // 启动定时重试机制
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val isEnabled = prefs.getBoolean(Constants.PREF_ENABLED, false)
+        if (isEnabled) {
+            startPeriodicRetry(this)
+        }
+
         return START_STICKY
     }
 
@@ -611,6 +665,7 @@ class SmsForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopPeriodicRetry()
         try { unregisterReceiver(updateReceiver) } catch (e: Exception) { /* ignore */ }
         try { unregisterReceiver(batteryReceiver) } catch (e: Exception) { /* ignore */ }
     }

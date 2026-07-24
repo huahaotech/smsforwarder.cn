@@ -40,7 +40,8 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         if (isAvailable && !lastNetworkState && (now - lastRetryTime > Constants.NETWORK_DEBOUNCE_MS)) {
             Log.d(TAG, "网络已恢复，触发失败消息重试")
             lastRetryTime = now
-            SmsReceiver.retryFailedMessages(context)
+            // 网络恢复时强制重试所有失败消息，不等待 nextRetryTime
+            SmsReceiver.retryFailedMessages(context, forceAll = true)
         }
 
         lastNetworkState = isAvailable

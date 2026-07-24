@@ -27,6 +27,10 @@ object Constants {
     const val INITIAL_RETRY_BACKOFF_MS = 2000L
     const val MAX_FAILED_MESSAGES = 100
     const val FAILED_MESSAGES_FILE = "failed_messages.json"
+    const val FAILED_MESSAGE_RETRY_INTERVAL_MS = 300_000L  // 定时重试间隔：5分钟
+    const val MAX_RETRY_DELAY_MS = 1_800_000L  // 单条消息最大重试延迟：30分钟
+    const val FAILED_MESSAGE_MAX_AGE_MS = 3_600_000L  // 失败消息最大存活时间：1小时，超过则丢弃
+    const val FAILED_MESSAGE_MAX_TOTAL_RETRIES = 10  // 单条消息最大总重试次数
 
     // 线程
     const val THREAD_POOL_SIZE = 4
