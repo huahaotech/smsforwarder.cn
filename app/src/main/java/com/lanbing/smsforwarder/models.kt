@@ -63,7 +63,7 @@ data class AppConfig(
  */
 data class ForwardResult(
     val success: Boolean,
-    val errorType: ForwardErrorType = ForwardErrorType.UNKNOWN,
+    val errorType: ForwardErrorType = ForwardErrorType.RETRYABLE,
     val errorMessage: String = ""
 ) {
     companion object {
