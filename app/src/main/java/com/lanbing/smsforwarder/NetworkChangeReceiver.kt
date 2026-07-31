@@ -40,13 +40,17 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         val isAvailable = isNetworkAvailable(context)
         val now = System.currentTimeMillis()
 
-        // 防抖处理：只在网络从不可用变为可用，且距离上次重试超过 NETWORK_DEBOUNCE_MS 时才重试
         if (isAvailable && !lastNetworkState && (now - lastRetryTime > Constants.NETWORK_DEBOUNCE_MS)) {
             lastRetryTime = now
             LogStore.append(context, "网络已恢复，正在重试失败转发")
             val ctx = context.applicationContext
+            val pendingResult = goAsync()
             executor.execute {
-                SmsReceiver.retryFailedMessages(ctx, forceAll = true)
+                try {
+                    SmsReceiver.retryFailedMessages(ctx, forceAll = true)
+                } finally {
+                    pendingResult.finish()
+                }
             }
         }
 

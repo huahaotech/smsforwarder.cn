@@ -83,15 +83,16 @@ class SmsReceiver : BroadcastReceiver() {
 
             fun isReadyForRetry(): Boolean {
                 if (retryCount >= Constants.RETRY_SCHEDULE.size) return false
-                val delay = Constants.RETRY_SCHEDULE[retryCount]
-                return System.currentTimeMillis() >= timestamp + delay
+                val totalDelay = Constants.RETRY_SCHEDULE.sliceArray(0 until retryCount).sum()
+                return System.currentTimeMillis() >= timestamp + totalDelay
             }
 
             fun shouldDiscard(): Boolean = retryCount >= Constants.RETRY_SCHEDULE.size
 
             fun nextRetryDelay(): Long {
                 if (retryCount >= Constants.RETRY_SCHEDULE.size) return 0L
-                return Constants.RETRY_SCHEDULE[retryCount]
+                val totalDelay = Constants.RETRY_SCHEDULE.sliceArray(0 until retryCount).sum()
+                return (timestamp + totalDelay) - System.currentTimeMillis()
             }
 
             fun toJSONObject(): JSONObject {
@@ -374,6 +375,12 @@ class SmsReceiver : BroadcastReceiver() {
         // 加载持久化的失败消息
         loadFailedMessages(context)
 
+        // 有新短信时，顺便重试失败队列中的消息
+        val ctx = context.applicationContext
+        executor.execute {
+            retryFailedMessages(ctx, forceAll = true)
+        }
+
         val pendingResult = goAsync()
 
         // 并行发送：每个通道只发一次，失败立即保存到失败队列
@@ -392,7 +399,6 @@ class SmsReceiver : BroadcastReceiver() {
                                 } else if (result.errorType == ForwardErrorType.NON_RETRYABLE) {
                                     LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                                 } else {
-                                    // 可重试的错误，立即保存到失败队列
                                     LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | ${result.errorMessage}")
                                     synchronized(failedMessageLock) {
                                         if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
@@ -403,6 +409,8 @@ class SmsReceiver : BroadcastReceiver() {
                                             ))
                                         }
                                     }
+                                    // 立即保存，防止进程被杀导致丢失
+                                    saveFailedMessages(context)
                                 }
                             }
                         } catch (e: Exception) {
