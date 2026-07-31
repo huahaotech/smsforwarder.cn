@@ -83,16 +83,15 @@ class SmsReceiver : BroadcastReceiver() {
 
             fun isReadyForRetry(): Boolean {
                 if (retryCount >= Constants.RETRY_SCHEDULE.size) return false
-                val totalDelay = Constants.RETRY_SCHEDULE.sliceArray(0 until retryCount).sum()
-                return System.currentTimeMillis() >= timestamp + totalDelay
+                val delay = Constants.RETRY_SCHEDULE[retryCount]
+                return System.currentTimeMillis() >= timestamp + delay
             }
 
             fun shouldDiscard(): Boolean = retryCount >= Constants.RETRY_SCHEDULE.size
 
             fun nextRetryDelay(): Long {
                 if (retryCount >= Constants.RETRY_SCHEDULE.size) return 0L
-                val totalDelay = Constants.RETRY_SCHEDULE.sliceArray(0 until retryCount).sum()
-                return (timestamp + totalDelay) - System.currentTimeMillis()
+                return (timestamp + Constants.RETRY_SCHEDULE[retryCount]) - System.currentTimeMillis()
             }
 
             fun toJSONObject(): JSONObject {
@@ -217,6 +216,11 @@ class SmsReceiver : BroadcastReceiver() {
                 if (toDiscard.isNotEmpty()) {
                     failedMessages.removeAll(toDiscard)
                     LogStore.append(context, "已清除 ${toDiscard.size} 条放弃的失败转发")
+                }
+
+                // 定时重试时，先检查网络是否可用，没网就跳过，不消耗重试次数
+                if (!forceAll && !NetworkChangeReceiver.isNetworkAvailable(context)) {
+                    return
                 }
 
                 val toRetry = failedMessages.filter {
@@ -374,12 +378,6 @@ class SmsReceiver : BroadcastReceiver() {
 
         // 加载持久化的失败消息
         loadFailedMessages(context)
-
-        // 有新短信时，顺便重试失败队列中的消息
-        val ctx = context.applicationContext
-        executor.execute {
-            retryFailedMessages(ctx, forceAll = true)
-        }
 
         val pendingResult = goAsync()
 

@@ -598,8 +598,6 @@ class SmsForegroundService : Service() {
         val isEnabled = prefs.getBoolean(Constants.PREF_ENABLED, false)
         if (isEnabled) {
             startPeriodicRetry(this)
-            // 服务启动时立即触发一次重试
-            SmsReceiver.retryFailedMessages(this, forceAll = true)
         }
 
         return START_STICKY

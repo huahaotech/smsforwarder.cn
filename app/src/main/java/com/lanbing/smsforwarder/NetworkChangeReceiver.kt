@@ -31,6 +31,25 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         private var lastRetryTime = 0L
         private var lastNetworkState = false
         private val executor = Executors.newSingleThreadExecutor()
+
+        fun isNetworkAvailable(context: Context): Boolean {
+            return try {
+                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val network = connectivityManager.activeNetwork ?: return false
+                    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                } else {
+                    @Suppress("DEPRECATION")
+                    val networkInfo = connectivityManager.activeNetworkInfo
+                    networkInfo?.isConnected == true
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "检查网络可用性时出错", t)
+                false
+            }
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -55,24 +74,5 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         }
 
         lastNetworkState = isAvailable
-    }
-
-    private fun isNetworkAvailable(context: Context): Boolean {
-        return try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val network = connectivityManager.activeNetwork ?: return false
-                val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-            } else {
-                @Suppress("DEPRECATION")
-                val networkInfo = connectivityManager.activeNetworkInfo
-                networkInfo?.isConnected == true
-            }
-        } catch (t: Throwable) {
-            Log.e(TAG, "检查网络可用性时出错", t)
-            false
-        }
     }
 }
