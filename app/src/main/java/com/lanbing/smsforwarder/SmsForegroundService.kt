@@ -22,6 +22,8 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -77,6 +79,24 @@ class SmsForegroundService : Service() {
         }
         private var retryStarted = false
         private var context: Context? = null
+
+        // 网络状态追踪
+        private var lastNetworkAvailable = false
+        private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                if (!lastNetworkAvailable) {
+                    lastNetworkAvailable = true
+                    LogStore.append(context ?: return, "网络已恢复，正在重试失败转发")
+                    executor.execute {
+                        SmsReceiver.retryFailedMessages(context ?: return, forceAll = true)
+                    }
+                }
+            }
+
+            override fun onLost(network: android.net.Network) {
+                lastNetworkAvailable = false
+            }
+        }
         
         fun startPeriodicRetry(ctx: Context) {
             context = ctx.applicationContext
@@ -439,12 +459,15 @@ class SmsForegroundService : Service() {
         }
         updateBatteryReceiverRegistration()
 
-        // 注册网络变化接收器（替代 manifest 注册，确保 Android 7.0+ 上生效）
+        // 注册 NetworkCallback 监听网络变化（比广播更可靠）
         try {
-            val networkFilter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
-            registerReceiver(NetworkChangeReceiver(), networkFilter)
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(request, networkCallback)
         } catch (t: Throwable) {
-            Log.w(TAG, "注册网络接收器失败", t)
+            Log.w(TAG, "注册网络回调失败", t)
         }
     }
 
@@ -713,6 +736,10 @@ class SmsForegroundService : Service() {
         stopPeriodicRetry()
         try { unregisterReceiver(updateReceiver) } catch (e: Exception) { /* ignore */ }
         try { unregisterReceiver(batteryReceiver) } catch (e: Exception) { /* ignore */ }
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.unregisterNetworkCallback(networkCallback)
+        } catch (_: Exception) { /* ignore */ }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

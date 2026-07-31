@@ -48,14 +48,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".NetworkChangeReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-            </intent-filter>
-        </receiver>
-
         <service
             android:name=".SmsForegroundService"
             android:exported="false"
