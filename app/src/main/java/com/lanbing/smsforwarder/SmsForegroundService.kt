@@ -63,13 +63,15 @@ class SmsForegroundService : Service() {
                 try {
                     val ctx = context
                     if (ctx != null) {
-                        SmsReceiver.retryFailedMessages(ctx, forceAll = false)
+                        executor.execute {
+                            SmsReceiver.retryFailedMessages(ctx, forceAll = false)
+                        }
                     }
                 } catch (t: Throwable) {
                     Log.w(TAG, "定时重试失败", t)
                 }
-                // 继续循环重试
-                retryHandler.postDelayed(this, Constants.FAILED_MESSAGE_RETRY_INTERVAL_MS)
+                // 继续循环重试，每10秒检查一次
+                retryHandler.postDelayed(this, 10_000L)
             }
         }
         private var retryStarted = false
@@ -81,6 +83,11 @@ class SmsForegroundService : Service() {
                 retryHandler.post(retryRunnable)
                 retryStarted = true
                 LogStore.append(ctx, "定时重试已启动")
+            } else {
+                // 已启动，立即触发一次重试（确保新保存的失败消息尽快被重试）
+                executor.execute {
+                    SmsReceiver.retryFailedMessages(context ?: return@execute, forceAll = false)
+                }
             }
         }
         

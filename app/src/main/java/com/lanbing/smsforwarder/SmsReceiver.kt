@@ -77,53 +77,21 @@ class SmsReceiver : BroadcastReceiver() {
             val highlightVerificationCode: Boolean,
             val timestamp: Long,
             val retryCount: Int = 0,
-            val errorType: ForwardErrorType = ForwardErrorType.UNKNOWN,
-            val errorMessage: String = "",
-            val nextRetryTime: Long = 0L,
-            val totalRetryCount: Int = 0
+            val errorMessage: String = ""
         ) {
-            /**
-             * 判断是否可重试
-             * 根据错误类型决定是否应该重试
-             */
-            fun isRetryable(): Boolean {
-                return errorType.isRetryable()
-            }
+            fun isRetryable(): Boolean = retryCount < Constants.RETRY_SCHEDULE.size
 
-            /**
-             * 判断是否到达重试时间
-             */
             fun isReadyForRetry(): Boolean {
-                return nextRetryTime <= 0L || System.currentTimeMillis() >= nextRetryTime
+                if (retryCount >= Constants.RETRY_SCHEDULE.size) return false
+                val delay = Constants.RETRY_SCHEDULE[retryCount]
+                return System.currentTimeMillis() >= timestamp + delay
             }
 
-            /**
-             * 判断消息是否已过期（距首次接收超过最大存活时间）
-             */
-            fun isExpired(): Boolean {
-                return System.currentTimeMillis() - timestamp > Constants.FAILED_MESSAGE_MAX_AGE_MS
-            }
+            fun shouldDiscard(): Boolean = retryCount >= Constants.RETRY_SCHEDULE.size
 
-            /**
-             * 判断是否达到最大总重试次数
-             */
-            fun hasExceededMaxRetries(): Boolean {
-                return totalRetryCount >= Constants.FAILED_MESSAGE_MAX_TOTAL_RETRIES
-            }
-
-            /**
-             * 判断是否应该丢弃（过期或超过最大重试次数）
-             */
-            fun shouldDiscard(): Boolean {
-                return isExpired() || hasExceededMaxRetries()
-            }
-
-            /**
-             * 计算下一次重试时间
-             */
-            fun calculateNextRetryTime(): Long {
-                val delay = errorType.getRetryDelay(retryCount)
-                return System.currentTimeMillis() + delay
+            fun nextRetryDelay(): Long {
+                if (retryCount >= Constants.RETRY_SCHEDULE.size) return 0L
+                return Constants.RETRY_SCHEDULE[retryCount]
             }
 
             fun toJSONObject(): JSONObject {
@@ -139,17 +107,12 @@ class SmsReceiver : BroadcastReceiver() {
                 obj.put("highlightVerificationCode", highlightVerificationCode)
                 obj.put("timestamp", timestamp)
                 obj.put("retryCount", retryCount)
-                obj.put("errorType", errorType.name)
                 obj.put("errorMessage", errorMessage)
-                obj.put("nextRetryTime", nextRetryTime)
-                obj.put("totalRetryCount", totalRetryCount)
                 return obj
             }
 
             companion object {
                 fun fromJSONObject(obj: JSONObject): FailedMessage {
-                    val errorTypeStr = obj.optString("errorType", "UNKNOWN")
-                    val errorType = try { ForwardErrorType.valueOf(errorTypeStr) } catch (t: Throwable) { ForwardErrorType.UNKNOWN }
                     return FailedMessage(
                         channelId = obj.getString("channelId"),
                         channelName = obj.getString("channelName"),
@@ -161,15 +124,12 @@ class SmsReceiver : BroadcastReceiver() {
                         showSenderPhone = obj.optBoolean("showSenderPhone", true),
                         highlightVerificationCode = obj.optBoolean("highlightVerificationCode", true),
                         timestamp = obj.getLong("timestamp"),
-                        retryCount = obj.getInt("retryCount"),
-                        errorType = errorType,
-                        errorMessage = obj.optString("errorMessage", ""),
-                        nextRetryTime = obj.optLong("nextRetryTime", 0L),
-                        totalRetryCount = obj.optInt("totalRetryCount", 0)
+                        retryCount = obj.optInt("retryCount", 0),
+                        errorMessage = obj.optString("errorMessage", "")
                     )
                 }
 
-                fun fromChannel(channel: Channel, sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean, timestamp: Long, errorType: ForwardErrorType, errorMessage: String, retryCount: Int = 0, nextRetryTime: Long = 0L, totalRetryCount: Int = 0): FailedMessage {
+                fun fromChannel(channel: Channel, sender: String, content: String, receiverPhoneNumber: String?, showSenderPhone: Boolean, highlightVerificationCode: Boolean, timestamp: Long, errorMessage: String = ""): FailedMessage {
                     return FailedMessage(
                         channelId = channel.id,
                         channelName = channel.name,
@@ -181,11 +141,8 @@ class SmsReceiver : BroadcastReceiver() {
                         showSenderPhone = showSenderPhone,
                         highlightVerificationCode = highlightVerificationCode,
                         timestamp = timestamp,
-                        retryCount = retryCount,
-                        errorType = errorType,
-                        errorMessage = errorMessage,
-                        nextRetryTime = nextRetryTime,
-                        totalRetryCount = totalRetryCount
+                        retryCount = 0,
+                        errorMessage = errorMessage
                     )
                 }
             }
@@ -255,17 +212,15 @@ class SmsReceiver : BroadcastReceiver() {
             synchronized(failedMessageLock) {
                 if (failedMessages.isEmpty()) return
 
-                // 智能过滤：丢弃过期或超重试的消息，只重试可重试且到达时间的消息
+                // 丢弃已超过重试次数的消息
                 val toDiscard = failedMessages.filter { it.shouldDiscard() }
                 if (toDiscard.isNotEmpty()) {
                     failedMessages.removeAll(toDiscard)
-                    LogStore.append(context, "已清除 ${toDiscard.size} 条过期或超重试的失败转发")
+                    LogStore.append(context, "已清除 ${toDiscard.size} 条放弃的失败转发")
                 }
 
-                val toRetry = failedMessages.filter { 
-                    it.isRetryable() && 
-                    it.retryCount < Constants.MAX_RETRY_ATTEMPTS &&
-                    !it.hasExceededMaxRetries() &&
+                val toRetry = failedMessages.filter {
+                    it.isRetryable() &&
                     (forceAll || it.isReadyForRetry())
                 }
                 if (toRetry.isEmpty()) {
@@ -274,48 +229,53 @@ class SmsReceiver : BroadcastReceiver() {
                 }
                 failedMessages.removeAll(toRetry)
 
+                val latch = java.util.concurrent.CountDownLatch(toRetry.size)
                 toRetry.forEach { failed ->
                     executor.execute {
                         try {
                             val receiver = SmsReceiver()
                             val channel = failed.toChannel()
                             val result = receiver.sendToWebhook(
-                                failed.channelTarget, failed.sender, failed.content, 
-                                failed.receiverPhoneNumber, channel.type, 
+                                failed.channelTarget, failed.sender, failed.content,
+                                failed.receiverPhoneNumber, channel.type,
                                 failed.showSenderPhone, failed.highlightVerificationCode
                             )
-                            
+
                             if (result.success) {
                                 LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
+                            } else if (result.errorType == ForwardErrorType.NON_RETRYABLE) {
+                                // 不可重试的错误，直接放弃
+                                LogStore.append(context, "重试转发失败（不可重试）-> ${failed.channelName}")
                             } else {
-                                val newTotalRetryCount = failed.totalRetryCount + 1
-                                val exceededTotalRetries = newTotalRetryCount >= Constants.FAILED_MESSAGE_MAX_TOTAL_RETRIES
-                                
-                                if (result.errorType.isRetryable() && 
-                                    failed.retryCount + 1 < Constants.MAX_RETRY_ATTEMPTS &&
-                                    !exceededTotalRetries) {
-                                    failedMessages.add(failed.copy(
-                                        retryCount = failed.retryCount + 1,
-                                        totalRetryCount = newTotalRetryCount,
-                                        errorType = result.errorType,
-                                        errorMessage = result.errorMessage,
-                                        nextRetryTime = System.currentTimeMillis() + result.errorType.getRetryDelay(failed.retryCount)
-                                    ))
-                                } else {
-                                    val reason = when {
-                                        !result.errorType.isRetryable() -> "不可重试的错误类型"
-                                        exceededTotalRetries -> "已达最大总重试次数"
-                                        else -> "已达最大重试次数"
+                                val newRetryCount = failed.retryCount + 1
+                                if (newRetryCount < Constants.RETRY_SCHEDULE.size) {
+                                    // 还在重试时间表内，加回等待下次重试
+                                    synchronized(failedMessageLock) {
+                                        failedMessages.add(failed.copy(
+                                            retryCount = newRetryCount,
+                                            errorMessage = result.errorMessage
+                                        ))
                                     }
-                                    LogStore.append(context, "重试转发失败（$reason）-> ${failed.channelName} | 错误: ${result.errorType.name} | 原因: ${result.errorMessage}")
+                                } else {
+                                    // 已达最大重试次数，放弃
+                                    LogStore.append(context, "重试转发失败（已放弃）-> ${failed.channelName}")
                                 }
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "重试失败", e)
+                        } finally {
+                            latch.countDown()
                         }
                     }
                 }
-                saveFailedMessages(context)
+
+                // 等待所有重试完成后再保存
+                executor.execute {
+                    try {
+                        latch.await(Constants.BROADCAST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    } catch (_: InterruptedException) { }
+                    saveFailedMessages(context)
+                }
             }
         }
     }
@@ -416,7 +376,7 @@ class SmsReceiver : BroadcastReceiver() {
 
         val pendingResult = goAsync()
 
-        // 并行发送
+        // 并行发送：每个通道只发一次，失败立即保存到失败队列
         executor.execute {
             val latch = java.util.concurrent.CountDownLatch(matched.size)
             try {
@@ -424,61 +384,22 @@ class SmsReceiver : BroadcastReceiver() {
                     executor.execute {
                         try {
                             if (!isValidUrl(ch.target)) {
-                                LogStore.append(context, "通道 ${ch.name} webhook 格式无效: ${ch.target}")
-                                // URL格式无效，不需要重试
-                                synchronized(failedMessageLock) {
-                                    if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
-                                        failedMessages.add(FailedMessage.fromChannel(
-                                            ch, sender, fullMessage, receiverPhoneNumber,
-                                            showSenderPhone, highlightVerificationCode, now,
-                                            ForwardErrorType.INVALID_URL, "URL格式无效"
-                                        ))
-                                    }
-                                }
+                                LogStore.append(context, "通道 ${ch.name} webhook 格式无效")
                             } else {
-                                var attempt = 0
-                                var lastResult: ForwardResult? = null
-                                var backoff = 0L
-                                
-                                // 智能重试：最多重试 MAX_RETRY_ATTEMPTS 次，但只对可重试的错误重试
-                                while (attempt < Constants.MAX_RETRY_ATTEMPTS) {
-                                    if (backoff > 0) {
-                                        try { Thread.sleep(backoff) } catch (_: InterruptedException) { }
-                                    }
-                                    
-                                    val result = sendToWebhook(ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
-                                    lastResult = result
-                                    
-                                    if (result.success) {
-                                        LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
-                                        break
-                                    }
-                                    
-                                    // 如果错误不可重试，立即退出循环
-                                    if (!result.errorType.isRetryable()) {
-                                        LogStore.append(context, "转发失败（不可重试）— 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 错误: ${result.errorType.name} | 原因: ${result.errorMessage}")
-                                        break
-                                    }
-                                    
-                                    attempt++
-                                    if (attempt < Constants.MAX_RETRY_ATTEMPTS) {
-                                        backoff = Constants.INITIAL_RETRY_BACKOFF_MS * attempt
-                                    } else {
-                                        // 达到最大重试次数
-                                        LogStore.append(context, "转发失败（已达最大重试次数）— 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 错误: ${result.errorType.name} | 原因: ${result.errorMessage}")
-                                    }
-                                }
-                                
-                                // 如果最终失败且是可重试的错误，添加到失败队列
-                                if (lastResult != null && !lastResult.success && lastResult.errorType.isRetryable()) {
+                                val result = sendToWebhook(ch.target, sender, fullMessage, receiverPhoneNumber, ch.type, showSenderPhone, highlightVerificationCode)
+                                if (result.success) {
+                                    LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
+                                } else if (result.errorType == ForwardErrorType.NON_RETRYABLE) {
+                                    LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
+                                } else {
+                                    // 可重试的错误，立即保存到失败队列
+                                    LogStore.append(context, "转发失败 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | ${result.errorMessage}")
                                     synchronized(failedMessageLock) {
                                         if (failedMessages.size < Constants.MAX_FAILED_MESSAGES) {
-                                            val nextRetryTime = System.currentTimeMillis() + lastResult.errorType.getRetryDelay(attempt)
                                             failedMessages.add(FailedMessage.fromChannel(
                                                 ch, sender, fullMessage, receiverPhoneNumber,
                                                 showSenderPhone, highlightVerificationCode, now,
-                                                lastResult.errorType, lastResult.errorMessage,
-                                                attempt, nextRetryTime
+                                                result.errorMessage
                                             ))
                                         }
                                     }
@@ -486,7 +407,7 @@ class SmsReceiver : BroadcastReceiver() {
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "发送异常", e)
-                            LogStore.append(context, "转发异常 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword}) | 异常: ${e.message ?: e.javaClass.simpleName}")
+                            LogStore.append(context, "转发异常 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
                         } finally {
                             latch.countDown()
                         }
@@ -500,10 +421,9 @@ class SmsReceiver : BroadcastReceiver() {
                     false
                 }
                 if (!completed) {
-                    LogStore.append(context, "部分转发任务超时（等待 ${Constants.BROADCAST_TIMEOUT_SECONDS}s 后返回）")
+                    LogStore.append(context, "部分转发任务超时")
                 }
 
-                // 保存失败消息
                 saveFailedMessages(context)
             } catch (t: Throwable) {
                 Log.e(TAG, "并行发送工作线程中发生意外错误", t)
@@ -633,27 +553,22 @@ class SmsReceiver : BroadcastReceiver() {
                     val errorBody = try { resp.body?.string()?.take(500) } catch (_: Exception) { "无法读取响应" }
                     val errorMsg = "HTTP ${resp.code}: ${errorBody ?: "无响应体"}"
                     
-                    // 根据HTTP状态码分类错误类型
-                    val errorType = when {
-                        resp.code == 429 -> ForwardErrorType.HTTP_RATE_LIMIT
-                        resp.code in 500..599 -> ForwardErrorType.HTTP_SERVER_ERROR
-                        resp.code in 400..499 -> ForwardErrorType.HTTP_CLIENT_ERROR
-                        else -> ForwardErrorType.UNKNOWN
-                    }
+                    // 4xx 客户端错误不可重试，其他可重试
+                    val errorType = if (resp.code in 400..499) ForwardErrorType.NON_RETRYABLE else ForwardErrorType.RETRYABLE
                     
                     ForwardResult.failure(errorType, errorMsg)
                 }
             }
         } catch (e: java.net.SocketTimeoutException) {
-            ForwardResult.failure(ForwardErrorType.NETWORK_TIMEOUT, "连接超时")
+            ForwardResult.failure(ForwardErrorType.RETRYABLE, "连接超时")
         } catch (e: java.net.UnknownHostException) {
-            ForwardResult.failure(ForwardErrorType.DNS_FAILURE, "域名解析失败")
+            ForwardResult.failure(ForwardErrorType.RETRYABLE, "域名解析失败")
         } catch (e: java.net.ConnectException) {
-            ForwardResult.failure(ForwardErrorType.CONNECTION_REFUSED, "连接被拒绝")
+            ForwardResult.failure(ForwardErrorType.RETRYABLE, "连接被拒绝")
         } catch (e: java.io.IOException) {
-            ForwardResult.failure(ForwardErrorType.NETWORK_UNAVAILABLE, "网络错误: ${e.message ?: e.javaClass.simpleName}")
+            ForwardResult.failure(ForwardErrorType.RETRYABLE, "网络错误: ${e.message ?: e.javaClass.simpleName}")
         } catch (e: Exception) {
-            ForwardResult.failure(ForwardErrorType.UNKNOWN, "未知错误: ${e.message ?: e.javaClass.simpleName}")
+            ForwardResult.failure(ForwardErrorType.RETRYABLE, "未知错误: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 

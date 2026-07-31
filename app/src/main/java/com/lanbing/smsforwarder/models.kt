@@ -17,56 +17,11 @@ enum class ChannelType { WECHAT, DINGTALK, FEISHU, GENERIC_WEBHOOK }
 
 /**
  * 转发错误类型
- * 用于区分不同类型的错误，实现智能重试策略
+ * 只区分可重试和不可重试两类
  */
 enum class ForwardErrorType {
-    NETWORK_TIMEOUT,      // 网络超时（可重试）
-    NETWORK_UNAVAILABLE,  // 网络不可用（可重试）
-    DNS_FAILURE,          // DNS解析失败（可重试）
-    CONNECTION_REFUSED,   // 连接被拒绝（可重试）
-    HTTP_SERVER_ERROR,    // HTTP 5xx错误（可重试）
-    HTTP_RATE_LIMIT,      // HTTP 429限流（可重试）
-    HTTP_CLIENT_ERROR,    // HTTP 4xx客户端错误（不应重试）
-    INVALID_URL,          // URL格式错误（不应重试）
-    UNKNOWN;              // 未知错误（可重试）
-
-    /**
-     * 判断该错误类型是否可重试
-     */
-    fun isRetryable(): Boolean {
-        return when (this) {
-            NETWORK_TIMEOUT,
-            NETWORK_UNAVAILABLE,
-            DNS_FAILURE,
-            CONNECTION_REFUSED,
-            HTTP_SERVER_ERROR,
-            HTTP_RATE_LIMIT,
-            UNKNOWN -> true
-            HTTP_CLIENT_ERROR,
-            INVALID_URL -> false
-        }
-    }
-
-    /**
-     * 获取建议的重试延迟（毫秒）
-     * 根据错误类型确定合适的重试间隔
-     */
-    fun getRetryDelay(attempt: Int): Long {
-        val baseDelay = when (this) {
-            NETWORK_TIMEOUT,
-            NETWORK_UNAVAILABLE,
-            DNS_FAILURE,
-            CONNECTION_REFUSED -> 60_000L        // 网络相关：1分钟
-            HTTP_SERVER_ERROR -> 120_000L           // 服务器错误：2分钟
-            HTTP_RATE_LIMIT -> 300_000L              // 限流：5分钟
-            UNKNOWN -> 180_000L                     // 未知错误：3分钟
-            HTTP_CLIENT_ERROR,
-            INVALID_URL -> 0L                       // 不可重试
-        }
-        // 指数退避：每次重试延迟翻倍
-        val delay = baseDelay * Math.pow(2.0, attempt.toDouble()).toLong()
-        return delay.coerceAtMost(Constants.MAX_RETRY_DELAY_MS)
-    }
+    RETRYABLE,     // 可重试（网络错误、超时、5xx等）
+    NON_RETRYABLE  // 不可重试（4xx、URL无效等）
 }
 
 data class Channel(

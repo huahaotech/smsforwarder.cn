@@ -16,7 +16,10 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import java.util.concurrent.Executors
 
 /**
  * NetworkChangeReceiver: 监听网络状态变化，网络恢复时触发失败消息重试
@@ -27,6 +30,7 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         private const val TAG = "NetworkChangeReceiver"
         private var lastRetryTime = 0L
         private var lastNetworkState = false
+        private val executor = Executors.newSingleThreadExecutor()
     }
 
     @Suppress("DEPRECATION")
@@ -40,7 +44,10 @@ class NetworkChangeReceiver : BroadcastReceiver() {
         if (isAvailable && !lastNetworkState && (now - lastRetryTime > Constants.NETWORK_DEBOUNCE_MS)) {
             lastRetryTime = now
             LogStore.append(context, "网络已恢复，正在重试失败转发")
-            SmsReceiver.retryFailedMessages(context, forceAll = true)
+            val ctx = context.applicationContext
+            executor.execute {
+                SmsReceiver.retryFailedMessages(ctx, forceAll = true)
+            }
         }
 
         lastNetworkState = isAvailable
