@@ -213,7 +213,6 @@ class SmsReceiver : BroadcastReceiver() {
             synchronized(failedMessageLock) {
                 if (failedMessages.isEmpty()) return
 
-                // 丢弃已超过重试次数的消息
                 val toDiscard = failedMessages.filter { it.shouldDiscard() }
                 if (toDiscard.isNotEmpty()) {
                     failedMessages.removeAll(toDiscard)
@@ -225,10 +224,15 @@ class SmsReceiver : BroadcastReceiver() {
                     (forceAll || it.isReadyForRetry())
                 }
                 if (toRetry.isEmpty()) {
+                    if (failedMessages.isNotEmpty()) {
+                        LogStore.append(context, "${failedMessages.size} 条失败转发等待下次重试时间")
+                    }
                     saveFailedMessages(context)
                     return
                 }
                 failedMessages.removeAll(toRetry)
+
+                LogStore.append(context, "正在重试 ${toRetry.size} 条失败转发")
 
                 val latch = java.util.concurrent.CountDownLatch(toRetry.size)
                 toRetry.forEach { failed ->
@@ -245,12 +249,10 @@ class SmsReceiver : BroadcastReceiver() {
                             if (result.success) {
                                 LogStore.append(context, "重试转发成功 -> ${failed.channelName}")
                             } else if (result.errorType == ForwardErrorType.NON_RETRYABLE) {
-                                // 不可重试的错误，直接放弃
                                 LogStore.append(context, "重试转发失败（不可重试）-> ${failed.channelName}")
                             } else {
                                 val newRetryCount = failed.retryCount + 1
                                 if (newRetryCount < Constants.RETRY_SCHEDULE.size) {
-                                    // 还在重试时间表内，加回等待下次重试
                                     synchronized(failedMessageLock) {
                                         failedMessages.add(failed.copy(
                                             retryCount = newRetryCount,
@@ -258,7 +260,6 @@ class SmsReceiver : BroadcastReceiver() {
                                         ))
                                     }
                                 } else {
-                                    // 已达最大重试次数，放弃
                                     LogStore.append(context, "重试转发失败（已放弃）-> ${failed.channelName}")
                                 }
                             }
@@ -270,7 +271,6 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                 }
 
-                // 等待所有重试完成后再保存
                 executor.execute {
                     try {
                         latch.await(Constants.BROADCAST_TIMEOUT_SECONDS, TimeUnit.SECONDS)

@@ -437,6 +437,14 @@ class SmsForegroundService : Service() {
             Log.w(TAG, "注册接收器失败", t)
         }
         updateBatteryReceiverRegistration()
+
+        // 注册网络变化接收器（替代 manifest 注册，确保 Android 7.0+ 上生效）
+        try {
+            val networkFilter = IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION)
+            registerReceiver(NetworkChangeReceiver(), networkFilter)
+        } catch (t: Throwable) {
+            Log.w(TAG, "注册网络接收器失败", t)
+        }
     }
 
     private fun updateBatteryReceiverRegistration() {
@@ -589,6 +597,8 @@ class SmsForegroundService : Service() {
         val isEnabled = prefs.getBoolean(Constants.PREF_ENABLED, false)
         if (isEnabled) {
             startPeriodicRetry(this)
+            // 服务启动时立即触发一次重试
+            SmsReceiver.retryFailedMessages(this, forceAll = true)
         }
 
         return START_STICKY
