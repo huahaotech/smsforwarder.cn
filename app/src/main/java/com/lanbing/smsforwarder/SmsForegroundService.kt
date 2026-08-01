@@ -88,7 +88,7 @@ class SmsForegroundService : Service() {
                     lastNetworkAvailable = true
                     LogStore.append(context ?: return, "网络已恢复，正在重试失败转发")
                     executor.execute {
-                        SmsReceiver.retryFailedMessages(context ?: return, forceAll = true)
+                        SmsReceiver.retryFailedMessages(context ?: return@execute, forceAll = true)
                     }
                 }
             }
