@@ -38,8 +38,11 @@ class NetworkChangeReceiver : BroadcastReceiver() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val network = connectivityManager.activeNetwork ?: return false
                     val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                    // 只要求具备 INTERNET 能力即可尝试转发。
+                    // 不强制 NET_CAPABILITY_VALIDATED：国内网络环境下该状态常不稳定
+                    // （移动网络切换延迟、部分 WiFi/运营商长期未验证），会导致定时重试被误判为无网而永远跳过。
+                    // 即使实际无法上网，sendToWebhook 失败后消息仍会保留（retryCount+1），不会丢失。
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 } else {
                     @Suppress("DEPRECATION")
                     val networkInfo = connectivityManager.activeNetworkInfo
