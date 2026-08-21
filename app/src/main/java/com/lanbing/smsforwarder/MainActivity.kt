@@ -34,6 +34,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -966,7 +967,7 @@ fun SmsForwarderApp(
                             val params = MessageTemplateRenderer.TemplateParams(
                                 sender = "10086",
                                 content = "【中国移动】您本月已使用流量 3.2GB，剩余 6.8GB。",
-                                receiverPhoneNumber = "138****8888",
+                                receiverPhone = "138****8888",
                                 verificationCode = "123456",
                                 matchedKeyword = "流量",
                                 channelName = editChannelName.ifBlank { "我的通道" }
@@ -5135,32 +5136,43 @@ fun SenderFilterDialog(
                             .heightIn(max = 180.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            rules.forEachIndexed { index, rule ->
-                                InputChip(
-                                    selected = false,
-                                    onClick = { /* 点击不做啥 */ },
-                                    label = {
-                                        Text(
-                                            text = rule,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                            style = MaterialTheme.typography.bodySmall
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // 按 4 个一行分组，withIndex 保留原始索引
+                            val rows = rules.withIndex().chunked(4)
+                            rows.forEach { rowItems ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    rowItems.forEach { (idx, rule) ->
+                                        AssistChip(
+                                            onClick = { rules.removeAt(idx) },
+                                            label = {
+                                                Text(
+                                                    text = rule,
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                            },
+                                            trailingIcon = {
+                                                Icon(
+                                                    Icons.Outlined.Close,
+                                                    contentDescription = "删除",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.weight(1f)
                                         )
-                                    },
-                                    trailingIcon = {
-                                        Icon(
-                                            Icons.Outlined.Close,
-                                            contentDescription = "删除",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    onTrailingIconClick = { rules.removeAt(index) },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
+                                    }
+                                    // 补齐空位
+                                    repeat(4 - rowItems.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                             }
                         }
                     }
