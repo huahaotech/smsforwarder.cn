@@ -85,6 +85,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     // 与下面的 Compose 版本保持一致
     composeOptions {
