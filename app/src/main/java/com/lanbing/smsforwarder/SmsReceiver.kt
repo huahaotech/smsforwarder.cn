@@ -22,6 +22,7 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.lanbing.smsforwarder.utils.ChannelLoader
+import com.lanbing.smsforwarder.utils.MessageMatcher
 import com.lanbing.smsforwarder.utils.NetworkMonitor
 import com.lanbing.smsforwarder.utils.SimInfoUtils
 import com.lanbing.smsforwarder.utils.WebhookSender
@@ -72,7 +73,9 @@ class SmsReceiver : BroadcastReceiver() {
             val highlightVerificationCode: Boolean,
             val timestamp: Long,
             val retryCount: Int = 0,
-            val errorMessage: String = ""
+            val errorMessage: String = "",
+            val messageTemplate: String? = null,
+            val matchedKeyword: String? = null
         ) {
             fun isRetryable(): Boolean = retryCount < Constants.RETRY_SCHEDULE.size
 
@@ -103,6 +106,8 @@ class SmsReceiver : BroadcastReceiver() {
                 obj.put("timestamp", timestamp)
                 obj.put("retryCount", retryCount)
                 obj.put("errorMessage", errorMessage)
+                if (messageTemplate != null) obj.put("messageTemplate", messageTemplate)
+                if (matchedKeyword != null) obj.put("matchedKeyword", matchedKeyword)
                 return obj
             }
 
@@ -120,14 +125,16 @@ class SmsReceiver : BroadcastReceiver() {
                         highlightVerificationCode = obj.optBoolean("highlightVerificationCode", true),
                         timestamp = obj.getLong("timestamp"),
                         retryCount = obj.optInt("retryCount", 0),
-                        errorMessage = obj.optString("errorMessage", "")
+                        errorMessage = obj.optString("errorMessage", ""),
+                        messageTemplate = if (obj.has("messageTemplate")) obj.getString("messageTemplate") else null,
+                        matchedKeyword = if (obj.has("matchedKeyword")) obj.getString("matchedKeyword") else null
                     )
                 }
 
                 fun fromChannel(
                     channel: Channel, sender: String, content: String, receiverPhoneNumber: String?,
                     showSenderPhone: Boolean, highlightVerificationCode: Boolean, timestamp: Long,
-                    errorMessage: String = ""
+                    errorMessage: String = "", matchedKeyword: String? = null
                 ): FailedMessage {
                     return FailedMessage(
                         channelId = channel.id,
@@ -141,7 +148,9 @@ class SmsReceiver : BroadcastReceiver() {
                         highlightVerificationCode = highlightVerificationCode,
                         timestamp = timestamp,
                         retryCount = 0,
-                        errorMessage = errorMessage
+                        errorMessage = errorMessage,
+                        messageTemplate = channel.messageTemplate,
+                        matchedKeyword = matchedKeyword
                     )
                 }
             }
@@ -244,9 +253,16 @@ class SmsReceiver : BroadcastReceiver() {
                             val channel = failed.toChannel()
                             // 优化：直接使用 WebhookSender 工具类，不再创建 SmsReceiver 实例
                             val result = WebhookSender.sendSmsForward(
-                                failed.channelTarget, failed.sender, failed.content,
-                                failed.receiverPhoneNumber, channel.type,
-                                failed.showSenderPhone, failed.highlightVerificationCode
+                                webhookUrl = failed.channelTarget,
+                                sender = failed.sender,
+                                content = failed.content,
+                                receiverPhoneNumber = failed.receiverPhoneNumber,
+                                type = channel.type,
+                                showSenderPhone = failed.showSenderPhone,
+                                highlightVerificationCode = failed.highlightVerificationCode,
+                                messageTemplate = failed.messageTemplate,
+                                matchedKeyword = failed.matchedKeyword,
+                                channelName = failed.channelName
                             )
 
                             if (result.success) {
@@ -350,6 +366,14 @@ class SmsReceiver : BroadcastReceiver() {
         }
         val fullMessage = normalizeContent(sb.toString())
 
+        // 全局发送者过滤（白名单/黑名单）
+        val senderWhitelist = loadSenderFilterList(prefs, Constants.PREF_SENDER_WHITELIST)
+        val senderBlacklist = loadSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST)
+        if (!MessageMatcher.passesGlobalSenderFilter(sender, senderWhitelist, senderBlacklist)) {
+            LogStore.append(context, "发送者 $sender 被全局过滤规则拦截，跳过转发")
+            return
+        }
+
         // 获取接收短信的本机号码
         val receiverPhoneNumber = if (showReceiverPhone) SimInfoUtils.getReceiverPhoneNumber(context, subscriptionId, prefs) else null
 
@@ -366,12 +390,10 @@ class SmsReceiver : BroadcastReceiver() {
             recentMessages[messageKey] = now
         }
 
-        // 收集所有匹配项：使用 channelMap O(1) 查找替代 channels.find 线性搜索
+        // 收集所有匹配项：使用 MessageMatcher 引擎（支持多种匹配模式、多关键词组合、发送者过滤）
         val matched = mutableListOf<Pair<Channel, KeywordConfig>>()
         configs.forEach { cfg ->
-            val kw = cfg.keyword.trim()
-            val match = if (kw.isEmpty()) true else fullMessage.contains(kw, ignoreCase = true)
-            if (match) {
+            if (MessageMatcher.matches(cfg, fullMessage, sender)) {
                 val ch = channelMap[cfg.channelId]
                 if (ch != null) matched.add(Pair(ch, cfg))
             }
@@ -395,9 +417,18 @@ class SmsReceiver : BroadcastReceiver() {
                             if (!WebhookSender.isValidUrl(ch.target)) {
                                 LogStore.append(context, "通道 ${ch.name} webhook 格式无效")
                             } else {
+                                val matchedKw = MessageMatcher.getAllKeywords(cfg).firstOrNull() ?: cfg.keyword
                                 val result = WebhookSender.sendSmsForward(
-                                    ch.target, sender, fullMessage, receiverPhoneNumber,
-                                    ch.type, showSenderPhone, highlightVerificationCode
+                                    webhookUrl = ch.target,
+                                    sender = sender,
+                                    content = fullMessage,
+                                    receiverPhoneNumber = receiverPhoneNumber,
+                                    type = ch.type,
+                                    showSenderPhone = showSenderPhone,
+                                    highlightVerificationCode = highlightVerificationCode,
+                                    messageTemplate = ch.messageTemplate,
+                                    matchedKeyword = matchedKw,
+                                    channelName = ch.name
                                 )
                                 if (result.success) {
                                     LogStore.append(context, "转发成功 — 来自: $sender -> ${ch.name} (规则: ${cfg.keyword})")
@@ -411,7 +442,7 @@ class SmsReceiver : BroadcastReceiver() {
                                                 FailedMessage.fromChannel(
                                                     ch, sender, fullMessage, receiverPhoneNumber,
                                                     showSenderPhone, highlightVerificationCode, now,
-                                                    result.errorMessage
+                                                    result.errorMessage, matchedKw
                                                 )
                                             )
                                         }
@@ -453,5 +484,21 @@ class SmsReceiver : BroadcastReceiver() {
         return s.replace("\r", "")
             .replace(Regex("\n{2,}"), "\n")
             .trim()
+    }
+
+    // 从 SharedPreferences 加载发送者过滤列表（JSON 数组格式）
+    private fun loadSenderFilterList(prefs: android.content.SharedPreferences, key: String): List<String>? {
+        val jsonStr = prefs.getString(key, null) ?: return null
+        if (jsonStr.isBlank()) return null
+        return try {
+            val arr = org.json.JSONArray(jsonStr)
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                list.add(arr.getString(i))
+            }
+            list.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            null
+        }
     }
 }

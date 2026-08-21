@@ -52,6 +52,7 @@ object ConfigManager {
                     put("name", ch.name)
                     put("type", ch.type.name)
                     put("target", ch.target)
+                    if (ch.messageTemplate != null) put("messageTemplate", ch.messageTemplate)
                 })
             }
             put("channels", channelsArr)
@@ -62,6 +63,14 @@ object ConfigManager {
                     put("id", cfg.id)
                     put("keyword", cfg.keyword)
                     put("channelId", cfg.channelId)
+                    put("matchMode", cfg.matchMode.name)
+                    put("matchLogic", cfg.matchLogic.name)
+                    val extraArr = JSONArray()
+                    cfg.extraKeywords.forEach { extraArr.put(it) }
+                    put("extraKeywords", extraArr)
+                    if (cfg.senderPattern != null) put("senderPattern", cfg.senderPattern)
+                    put("senderMatchMode", cfg.senderMatchMode.name)
+                    put("enabled", cfg.enabled)
                 })
             }
             put("keywordConfigs", configsArr)
@@ -221,6 +230,16 @@ object ConfigManager {
             editor.putInt(Constants.PREF_LOW_BATTERY_THRESHOLD, json.optInt("lowBatteryThreshold", Constants.DEFAULT_LOW_BATTERY_THRESHOLD))
             editor.putInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, json.optInt("highBatteryThreshold", Constants.DEFAULT_HIGH_BATTERY_THRESHOLD))
             editor.putBoolean(Constants.PREF_START_ON_BOOT, json.optBoolean("startOnBoot", false))
+
+            // 导入发送者黑白名单
+            val whitelistArr = json.optJSONArray("senderWhitelist")
+            if (whitelistArr != null) {
+                editor.putString(Constants.PREF_SENDER_WHITELIST, whitelistArr.toString())
+            }
+            val blacklistArr = json.optJSONArray("senderBlacklist")
+            if (blacklistArr != null) {
+                editor.putString(Constants.PREF_SENDER_BLACKLIST, blacklistArr.toString())
+            }
 
             val sim1Phone = if (json.isNull("customSim1Phone")) "" else json.optString("customSim1Phone", "")
             if (sim1Phone.isEmpty()) {

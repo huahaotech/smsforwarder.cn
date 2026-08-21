@@ -15,6 +15,9 @@ import com.lanbing.smsforwarder.Channel
 import com.lanbing.smsforwarder.ChannelType
 import com.lanbing.smsforwarder.Constants
 import com.lanbing.smsforwarder.KeywordConfig
+import com.lanbing.smsforwarder.MatchLogic
+import com.lanbing.smsforwarder.MatchMode
+import com.lanbing.smsforwarder.SenderMatchMode
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -82,7 +85,13 @@ object ChannelLoader {
                 val o = arr.getJSONObject(i)
                 val typeStr = o.optString("type", "WECHAT")
                 val type = try { ChannelType.valueOf(typeStr) } catch (t: Throwable) { ChannelType.WECHAT }
-                Channel(o.getString("id"), o.getString("name"), type, o.getString("target"))
+                Channel(
+                    id = o.getString("id"),
+                    name = o.getString("name"),
+                    type = type,
+                    target = o.getString("target"),
+                    messageTemplate = o.optString("messageTemplate", null)?.takeIf { it.isNotBlank() }
+                )
             }
         } catch (t: Throwable) {
             emptyList()
@@ -94,7 +103,33 @@ object ChannelLoader {
             val arr = JSONArray(arrStr)
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                KeywordConfig(o.getString("id"), o.getString("keyword"), o.getString("channelId"))
+                val matchModeStr = o.optString("matchMode", "CONTAINS")
+                val matchMode = try { MatchMode.valueOf(matchModeStr) } catch (_: Throwable) { MatchMode.CONTAINS }
+                val matchLogicStr = o.optString("matchLogic", "OR")
+                val matchLogic = try { MatchLogic.valueOf(matchLogicStr) } catch (_: Throwable) { MatchLogic.OR }
+                val senderMatchModeStr = o.optString("senderMatchMode", "CONTAINS")
+                val senderMatchMode = try { SenderMatchMode.valueOf(senderMatchModeStr) } catch (_: Throwable) { SenderMatchMode.CONTAINS }
+
+                // 解析 extraKeywords 数组（旧版本没有此字段时为空列表）
+                val extraKeywords = mutableListOf<String>()
+                val extraArr = o.optJSONArray("extraKeywords")
+                if (extraArr != null) {
+                    for (j in 0 until extraArr.length()) {
+                        extraKeywords.add(extraArr.getString(j))
+                    }
+                }
+
+                KeywordConfig(
+                    id = o.getString("id"),
+                    keyword = o.getString("keyword"),
+                    channelId = o.getString("channelId"),
+                    matchMode = matchMode,
+                    matchLogic = matchLogic,
+                    extraKeywords = extraKeywords,
+                    senderPattern = o.optString("senderPattern", null)?.takeIf { it.isNotBlank() },
+                    senderMatchMode = senderMatchMode,
+                    enabled = o.optBoolean("enabled", true)
+                )
             }
         } catch (t: Throwable) {
             emptyList()
@@ -112,6 +147,7 @@ object ChannelLoader {
             o.put("name", it.name)
             o.put("type", it.type.name)
             o.put("target", it.target)
+            if (it.messageTemplate != null) o.put("messageTemplate", it.messageTemplate)
             arr.put(o)
         }
         val jsonStr = arr.toString()
@@ -132,12 +168,23 @@ object ChannelLoader {
             o.put("id", it.id)
             o.put("keyword", it.keyword)
             o.put("channelId", it.channelId)
+            o.put("matchMode", it.matchMode.name)
+            o.put("matchLogic", it.matchLogic.name)
+            // extraKeywords 数组
+            val extraArr = JSONArray()
+            it.extraKeywords.forEach { kw -> extraArr.put(kw) }
+            o.put("extraKeywords", extraArr)
+            if (it.senderPattern != null) o.put("senderPattern", it.senderPattern)
+            o.put("senderMatchMode", it.senderMatchMode.name)
+            o.put("enabled", it.enabled)
             arr.put(o)
         }
         val jsonStr = arr.toString()
         prefs.edit().putString(Constants.PREF_KEYWORD_CONFIGS, jsonStr).apply()
         cachedConfigs = configs
         cachedConfigsHash = jsonStr.hashCode()
+        // 关键词变更，清理正则缓存
+        MessageMatcher.clearRegexCache()
     }
 
     /**

@@ -17,6 +17,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Webhook 发送工具类
@@ -46,6 +49,9 @@ object WebhookSender {
      * @param type 通道类型
      * @param showSenderPhone 是否显示发送方号码
      * @param highlightVerificationCode 是否突出显示验证码
+     * @param messageTemplate 自定义消息模板（null 则使用默认模板）
+     * @param matchedKeyword 命中的关键词（用于模板占位符）
+     * @param channelName 通道名称（用于模板占位符）
      * @return 转发结果
      */
     fun sendSmsForward(
@@ -55,13 +61,48 @@ object WebhookSender {
         receiverPhoneNumber: String?,
         type: ChannelType,
         showSenderPhone: Boolean,
-        highlightVerificationCode: Boolean
+        highlightVerificationCode: Boolean,
+        messageTemplate: String? = null,
+        matchedKeyword: String? = null,
+        channelName: String? = null
     ): ForwardResult {
+        val params = MessageTemplateRenderer.TemplateParams(
+            sender = sender,
+            content = content,
+            receiverPhone = receiverPhoneNumber,
+            verificationCode = if (highlightVerificationCode) VerificationCodeExtractor.extract(content) else null,
+            matchedKeyword = matchedKeyword,
+            channelName = channelName
+        )
+
         val json = when (type) {
-            ChannelType.FEISHU -> buildFeishuSmsMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.WECHAT -> buildWechatSmsMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.DINGTALK -> buildDingtalkSmsMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
-            ChannelType.GENERIC_WEBHOOK -> buildGenericSmsMessage(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode)
+            ChannelType.FEISHU -> buildFeishuSmsMessage(params, showSenderPhone, highlightVerificationCode, messageTemplate)
+            ChannelType.WECHAT -> buildWechatSmsMessage(params, showSenderPhone, highlightVerificationCode, messageTemplate)
+            ChannelType.DINGTALK -> buildDingtalkSmsMessage(params, showSenderPhone, highlightVerificationCode, messageTemplate)
+            ChannelType.GENERIC_WEBHOOK -> buildGenericSmsMessage(params, showSenderPhone, highlightVerificationCode, messageTemplate)
+        }
+
+        return sendJsonRequest(webhookUrl, json)
+    }
+
+    /**
+     * 发送测试消息到指定 Webhook（用于验证通道配置是否正确）
+     */
+    fun sendTestMessage(webhookUrl: String, type: ChannelType, channelName: String? = null): ForwardResult {
+        val params = MessageTemplateRenderer.TemplateParams(
+            sender = "10086",
+            content = "【短信转发助手】这是一条测试消息，用于验证通道配置是否正常。\n如果您收到此消息，说明配置成功！",
+            receiverPhone = null,
+            verificationCode = "123456",
+            matchedKeyword = "测试",
+            channelName = channelName
+        )
+
+        val json = when (type) {
+            ChannelType.WECHAT -> buildWechatSmsMessage(params, showSenderPhone = true, highlightVerificationCode = true, template = null)
+            ChannelType.DINGTALK -> buildDingtalkSmsMessage(params, showSenderPhone = true, highlightVerificationCode = true, template = null)
+            ChannelType.FEISHU -> buildFeishuSmsMessage(params, showSenderPhone = true, highlightVerificationCode = true, template = null)
+            ChannelType.GENERIC_WEBHOOK -> buildGenericSmsMessage(params, showSenderPhone = true, highlightVerificationCode = true, template = null)
         }
 
         return sendJsonRequest(webhookUrl, json)
@@ -120,82 +161,93 @@ object WebhookSender {
 
     // ==================== 短信转发消息构建 ====================
 
-    private fun buildMessageWithHighlightedCode(
-        sender: String,
-        content: String,
-        receiverPhoneNumber: String?,
+    /**
+     * 构建消息正文文本：优先使用自定义模板，否则使用默认格式
+     */
+    private fun buildMessageText(
+        params: MessageTemplateRenderer.TemplateParams,
         showSenderPhone: Boolean,
-        highlightVerificationCode: Boolean
+        highlightVerificationCode: Boolean,
+        template: String?
     ): String {
-        val parts = mutableListOf<String>()
-        val code = if (highlightVerificationCode) VerificationCodeExtractor.extract(content) else null
-
-        if (code != null) {
-            parts.add("验证码: $code")
+        return if (!template.isNullOrBlank()) {
+            MessageTemplateRenderer.render(template, params)
+        } else {
+            MessageTemplateRenderer.buildDefaultMessage(params, showSenderPhone, highlightVerificationCode)
         }
-        if (receiverPhoneNumber != null) {
-            parts.add("本机: $receiverPhoneNumber")
-        }
-        if (showSenderPhone) {
-            parts.add("来自: $sender")
-        }
-        parts.add(content)
-
-        return parts.joinToString("\n")
     }
 
     private fun buildWechatSmsMessage(
-        sender: String, content: String, receiverPhoneNumber: String?,
-        showSenderPhone: Boolean, highlightVerificationCode: Boolean
+        params: MessageTemplateRenderer.TemplateParams,
+        showSenderPhone: Boolean,
+        highlightVerificationCode: Boolean,
+        template: String?
     ): JSONObject {
         val json = JSONObject()
         json.put("msgtype", "text")
         val text = JSONObject()
-        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        text.put("content", buildMessageText(params, showSenderPhone, highlightVerificationCode, template))
         json.put("text", text)
         return json
     }
 
     private fun buildDingtalkSmsMessage(
-        sender: String, content: String, receiverPhoneNumber: String?,
-        showSenderPhone: Boolean, highlightVerificationCode: Boolean
+        params: MessageTemplateRenderer.TemplateParams,
+        showSenderPhone: Boolean,
+        highlightVerificationCode: Boolean,
+        template: String?
     ): JSONObject {
         val json = JSONObject()
         json.put("msgtype", "text")
         val text = JSONObject()
-        text.put("content", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        text.put("content", buildMessageText(params, showSenderPhone, highlightVerificationCode, template))
         json.put("text", text)
         return json
     }
 
     private fun buildFeishuSmsMessage(
-        sender: String, content: String, receiverPhoneNumber: String?,
-        showSenderPhone: Boolean, highlightVerificationCode: Boolean
+        params: MessageTemplateRenderer.TemplateParams,
+        showSenderPhone: Boolean,
+        highlightVerificationCode: Boolean,
+        template: String?
     ): JSONObject {
         val json = JSONObject()
         json.put("msg_type", "text")
         val text = JSONObject()
-        text.put("text", buildMessageWithHighlightedCode(sender, content, receiverPhoneNumber, showSenderPhone, highlightVerificationCode))
+        text.put("text", buildMessageText(params, showSenderPhone, highlightVerificationCode, template))
         json.put("content", text)
         return json
     }
 
     private fun buildGenericSmsMessage(
-        sender: String, content: String, receiverPhoneNumber: String?,
-        showSenderPhone: Boolean, highlightVerificationCode: Boolean
+        params: MessageTemplateRenderer.TemplateParams,
+        showSenderPhone: Boolean,
+        highlightVerificationCode: Boolean,
+        template: String?
     ): JSONObject {
         val json = JSONObject()
         if (showSenderPhone) {
-            json.put("sender", sender)
+            json.put("sender", params.sender)
         }
-        if (receiverPhoneNumber != null) {
-            json.put("receiver", receiverPhoneNumber)
+        if (params.receiverPhone != null) {
+            json.put("receiver", params.receiverPhone)
         }
-        json.put("content", content)
+        // 如果有自定义模板，content 为渲染后的完整内容；否则为原始内容
+        if (!template.isNullOrBlank()) {
+            json.put("content", MessageTemplateRenderer.render(template, params))
+        } else {
+            json.put("content", params.content)
+        }
         if (highlightVerificationCode) {
-            json.put("verificationCode", VerificationCodeExtractor.extract(content))
+            json.put("verificationCode", params.verificationCode)
         }
-        json.put("timestamp", System.currentTimeMillis())
+        json.put("timestamp", params.timestamp)
+        if (params.matchedKeyword != null) {
+            json.put("matchedKeyword", params.matchedKeyword)
+        }
+        if (params.channelName != null) {
+            json.put("channelName", params.channelName)
+        }
         return json
     }
 

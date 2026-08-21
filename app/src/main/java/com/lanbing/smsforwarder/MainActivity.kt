@@ -777,13 +777,63 @@ fun SmsForwarderApp(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
+                    // 测试转发按钮
+                    var testState by remember { mutableStateOf<TestSendState>(TestSendState.Idle) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val url = editChannelTarget.trim()
+                                if (!WebhookSender.isValidUrl(url)) {
+                                    testState = TestSendState.Error("Webhook 地址格式无效")
+                                    return@OutlinedButton
+                                }
+                                testState = TestSendState.Sending
+                                // 后台线程发送
+                                kotlin.concurrent.thread {
+                                    val result = WebhookSender.sendTestMessage(url, editChannelType, editChannelName.trim())
+                                    testState = if (result.success) {
+                                        TestSendState.Success
+                                    } else {
+                                        TestSendState.Error(result.errorMessage.ifBlank { "发送失败" })
+                                    }
+                                }
+                            },
+                            enabled = testState != TestSendState.Sending && editChannelTarget.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            when (testState) {
+                                TestSendState.Idle -> Text("发送测试消息")
+                                TestSendState.Sending -> Text("发送中…")
+                                TestSendState.Success -> Text("✓ 发送成功")
+                                is TestSendState.Error -> Text("发送测试")
+                            }
+                        }
+                    }
+                    when (val s = testState) {
+                        is TestSendState.Error -> Text(
+                            text = "发送失败：${s.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFEE4444)
+                        )
+                        TestSendState.Success -> Text(
+                            text = "测试消息发送成功，请检查目标通道是否收到",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF10B981)
+                        )
+                        else -> {}
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val ch = editingChannel ?: return@Button
-                        val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim())
+                        val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim(), ch.messageTemplate)
                         channels = channels.map { if (it.id == ch.id) updated else it }
                         saveChannels(prefs, channels)
                         LogStore.append(context, "编辑通道: ${updated.name}")
@@ -3305,6 +3355,50 @@ fun ChannelTab(
                         shape = RoundedCornerShape(12.dp)
                     )
 
+                    // 测试转发按钮
+                    var testState by remember { mutableStateOf<TestSendState>(TestSendState.Idle) }
+                    OutlinedButton(
+                        onClick = {
+                            val url = newChannelTarget.trim()
+                            if (!WebhookSender.isValidUrl(url)) {
+                                testState = TestSendState.Error("Webhook 地址格式无效")
+                                return@OutlinedButton
+                            }
+                            testState = TestSendState.Sending
+                            kotlin.concurrent.thread {
+                                val result = WebhookSender.sendTestMessage(url, newChannelType, newChannelName.trim())
+                                testState = if (result.success) {
+                                    TestSendState.Success
+                                } else {
+                                    TestSendState.Error(result.errorMessage.ifBlank { "发送失败" })
+                                }
+                            }
+                        },
+                        enabled = testState != TestSendState.Sending && newChannelTarget.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        when (testState) {
+                            TestSendState.Idle -> Text("发送测试消息")
+                            TestSendState.Sending -> Text("发送中…")
+                            TestSendState.Success -> Text("✓ 发送成功")
+                            is TestSendState.Error -> Text("发送测试")
+                        }
+                    }
+                    when (val s = testState) {
+                        is TestSendState.Error -> Text(
+                            text = "发送失败：${s.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFEE4444)
+                        )
+                        TestSendState.Success -> Text(
+                            text = "测试消息发送成功，请检查目标通道是否收到",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF10B981)
+                        )
+                        else -> {}
+                    }
+
                     // Security warning
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -4150,6 +4244,16 @@ fun PermissionManagementItem(
 }
 
 fun getChannelTypeLabel(type: ChannelType): String = ConfigManager.getChannelTypeLabel(type)
+
+/**
+ * 测试消息发送状态
+ */
+sealed class TestSendState {
+    object Idle : TestSendState()
+    object Sending : TestSendState()
+    object Success : TestSendState()
+    data class Error(val message: String) : TestSendState()
+}
 
 private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> = ChannelLoader.loadChannels(prefs)
 

@@ -16,6 +16,36 @@ package com.lanbing.smsforwarder
 enum class ChannelType { WECHAT, DINGTALK, FEISHU, GENERIC_WEBHOOK }
 
 /**
+ * 关键词匹配模式
+ *
+ * 控制一条规则中关键词与短信内容的匹配方式。
+ */
+enum class MatchMode {
+    CONTAINS,   // 包含匹配（默认，向后兼容）
+    EXACT,      // 精确匹配
+    REGEX,      // 正则表达式匹配
+    EXCLUDE     // 排除匹配（不包含该关键词才转发）
+}
+
+/**
+ * 发送者匹配模式
+ */
+enum class SenderMatchMode {
+    CONTAINS,   // 包含匹配
+    EXACT,      // 精确匹配
+    WILDCARD,   // 通配符匹配（* 代表任意字符）
+    REGEX       // 正则表达式匹配
+}
+
+/**
+ * 多关键词组合逻辑
+ */
+enum class MatchLogic {
+    OR,     // 命中任意一个关键词即匹配（默认，向后兼容）
+    AND     // 必须同时命中所有关键词才匹配
+}
+
+/**
  * 转发错误类型
  * 只区分可重试和不可重试两类
  */
@@ -28,13 +58,20 @@ data class Channel(
     val id: String,
     val name: String,
     val type: ChannelType,
-    val target: String           // webhook URL
+    val target: String,           // webhook URL
+    val messageTemplate: String? = null  // 自定义消息模板，null 表示使用默认模板
 )
 
 data class KeywordConfig(
     val id: String,
-    val keyword: String, // empty string means match-all
-    val channelId: String
+    val keyword: String,          // 主关键词，empty string means match-all
+    val channelId: String,
+    val matchMode: MatchMode = MatchMode.CONTAINS,   // 内容匹配模式
+    val matchLogic: MatchLogic = MatchLogic.OR,      // 多关键词组合逻辑
+    val extraKeywords: List<String> = emptyList(),   // 额外关键词列表（用于 AND/OR 组合）
+    val senderPattern: String? = null,               // 发送者匹配模式，null 表示不过滤
+    val senderMatchMode: SenderMatchMode = SenderMatchMode.CONTAINS, // 发送者匹配模式
+    val enabled: Boolean = true                      // 规则是否启用
 )
 
 data class AppConfig(
