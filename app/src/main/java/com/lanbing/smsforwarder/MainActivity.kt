@@ -74,7 +74,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import com.lanbing.smsforwarder.utils.ChannelLoader
+import com.lanbing.smsforwarder.ExportConfig
 import com.lanbing.smsforwarder.utils.ConfigManager
+import com.lanbing.smsforwarder.utils.PermissionUtils
+import com.lanbing.smsforwarder.utils.SimInfoUtils
+import com.lanbing.smsforwarder.utils.WebhookSender
 import java.io.File
 import java.util.*
 
@@ -230,12 +234,6 @@ class MainActivity : ComponentActivity() {
         val svc = Intent(this, SmsForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc) else startService(svc)
     }
-}
-
-private val webhookUrlRegex = Regex("""^https?://[^\s/$.?#].[^\s]*$""", RegexOption.IGNORE_CASE)
-
-fun isValidWebhookUrl(url: String): Boolean {
-    return webhookUrlRegex.matches(url)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -576,7 +574,7 @@ fun SmsForwarderApp(
                                 Toast.makeText(context, "请填写通道名称和 Webhook 地址", Toast.LENGTH_SHORT).show()
                                 return@ChannelTab
                             }
-                            if (!isValidWebhookUrl(newChannelTarget)) {
+                            if (!WebhookSender.isValidUrl(newChannelTarget)) {
                                 Toast.makeText(context, "Webhook 地址格式无效，请输入有效的 http:// 或 https:// 地址", Toast.LENGTH_SHORT).show()
                                 return@ChannelTab
                             }
@@ -689,7 +687,24 @@ fun SmsForwarderApp(
                         onShowPrivacyPolicy = { showPrivacyDialog = true },
                         permissionUpdateTrigger = permissionUpdateTrigger,
                         onExportConfig = {
-                            val jsonStr = generateConfigJson(channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                            val exportCfg = ExportConfig(
+                                channels = channels,
+                                keywordConfigs = configs,
+                                showReceiverPhone = showReceiverPhone,
+                                showSenderPhone = showSenderPhone,
+                                highlightVerificationCode = highlightVerificationCode,
+                                batteryReminderEnabled = batteryReminderEnabled,
+                                lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+                                highBatteryReminderEnabled = highBatteryReminderEnabled,
+                                chargingReminderEnabled = chargingReminderEnabled,
+                                batteryReminderChannelId = batteryReminderChannelId,
+                                lowBatteryThreshold = lowBatteryThreshold,
+                                highBatteryThreshold = highBatteryThreshold,
+                                customSim1Phone = customSim1Phone,
+                                customSim2Phone = customSim2Phone,
+                                startOnBoot = startOnBoot
+                            )
+                            val jsonStr = ConfigManager.generateConfigJson(exportCfg)
                             exportJsonStr = jsonStr
                             showExportDialog = true
                         },
@@ -969,7 +984,24 @@ fun SmsForwarderApp(
 
                     Button(
                         onClick = {
-                            exportConfig(context, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode, batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled, chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold, highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot)
+                            val exportCfg = ExportConfig(
+                                channels = channels,
+                                keywordConfigs = configs,
+                                showReceiverPhone = showReceiverPhone,
+                                showSenderPhone = showSenderPhone,
+                                highlightVerificationCode = highlightVerificationCode,
+                                batteryReminderEnabled = batteryReminderEnabled,
+                                lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+                                highBatteryReminderEnabled = highBatteryReminderEnabled,
+                                chargingReminderEnabled = chargingReminderEnabled,
+                                batteryReminderChannelId = batteryReminderChannelId,
+                                lowBatteryThreshold = lowBatteryThreshold,
+                                highBatteryThreshold = highBatteryThreshold,
+                                customSim1Phone = customSim1Phone,
+                                customSim2Phone = customSim2Phone,
+                                startOnBoot = startOnBoot
+                            )
+                            ConfigManager.exportConfig(context, exportCfg)
                             showExportDialog = false
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -1254,7 +1286,7 @@ fun ImportPreviewDialog(
                         Column(modifier = Modifier.padding(12.dp)) {
                             parsedConfig?.let { config ->
                                 val channels = config.optJSONArray("channels")
-                                val configs = config.optJSONArray("configs")
+                                val configs = config.optJSONArray("keywordConfigs")
                                 val batteryReminder = config.optBoolean("batteryReminderEnabled", false)
                                 val chargingReminder = config.optBoolean("chargingReminderEnabled", false)
                                 val lowBatteryThreshold = config.optInt("lowBatteryThreshold", 20)
@@ -4126,53 +4158,6 @@ internal fun saveChannels(prefs: android.content.SharedPreferences, channels: Li
 private fun loadConfigs(prefs: android.content.SharedPreferences): List<KeywordConfig> = ChannelLoader.loadConfigs(prefs)
 
 internal fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<KeywordConfig>) = ChannelLoader.saveConfigs(prefs, configs)
-
-private fun generateConfigJson(
-    channels: List<Channel>,
-    configs: List<KeywordConfig>,
-    showReceiverPhone: Boolean,
-    showSenderPhone: Boolean,
-    highlightVerificationCode: Boolean,
-    batteryReminderEnabled: Boolean,
-    lowBatteryReminderEnabled: Boolean,
-    highBatteryReminderEnabled: Boolean,
-    chargingReminderEnabled: Boolean,
-    batteryReminderChannelId: String?,
-    lowBatteryThreshold: Int,
-    highBatteryThreshold: Int,
-    customSim1Phone: String?,
-    customSim2Phone: String?,
-    startOnBoot: Boolean
-): String = ConfigManager.generateConfigJson(
-    channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode,
-    batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled,
-    chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold,
-    highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot
-)
-
-private fun exportConfig(
-    context: Context,
-    channels: List<Channel>,
-    configs: List<KeywordConfig>,
-    showReceiverPhone: Boolean,
-    showSenderPhone: Boolean,
-    highlightVerificationCode: Boolean,
-    batteryReminderEnabled: Boolean,
-    lowBatteryReminderEnabled: Boolean,
-    highBatteryReminderEnabled: Boolean,
-    chargingReminderEnabled: Boolean,
-    batteryReminderChannelId: String?,
-    lowBatteryThreshold: Int,
-    highBatteryThreshold: Int,
-    customSim1Phone: String?,
-    customSim2Phone: String?,
-    startOnBoot: Boolean
-) = ConfigManager.exportConfig(
-    context, channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode,
-    batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled,
-    chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold,
-    highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot
-)
 
 private fun saveConfigToDownloads(
     context: Context,

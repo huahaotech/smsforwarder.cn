@@ -18,9 +18,11 @@ import androidx.core.content.FileProvider
 import com.lanbing.smsforwarder.Channel
 import com.lanbing.smsforwarder.ChannelType
 import com.lanbing.smsforwarder.Constants
+import com.lanbing.smsforwarder.ExportConfig
 import com.lanbing.smsforwarder.KeywordConfig
 import com.lanbing.smsforwarder.LogStore
 import com.lanbing.smsforwarder.R
+import com.lanbing.smsforwarder.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -38,29 +40,13 @@ object ConfigManager {
     /**
      * 生成配置 JSON 字符串
      */
-    fun generateConfigJson(
-        channels: List<Channel>,
-        configs: List<KeywordConfig>,
-        showReceiverPhone: Boolean,
-        showSenderPhone: Boolean,
-        highlightVerificationCode: Boolean,
-        batteryReminderEnabled: Boolean,
-        lowBatteryReminderEnabled: Boolean,
-        highBatteryReminderEnabled: Boolean,
-        chargingReminderEnabled: Boolean,
-        batteryReminderChannelId: String?,
-        lowBatteryThreshold: Int,
-        highBatteryThreshold: Int,
-        customSim1Phone: String?,
-        customSim2Phone: String?,
-        startOnBoot: Boolean
-    ): String {
+    fun generateConfigJson(config: ExportConfig): String {
         return JSONObject().apply {
-            put("version", "2.9.0")
+            put("version", BuildConfig.VERSION_NAME)
             put("exportTime", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
 
             val channelsArr = JSONArray()
-            channels.forEach { ch ->
+            config.channels.forEach { ch ->
                 channelsArr.put(JSONObject().apply {
                     put("id", ch.id)
                     put("name", ch.name)
@@ -71,7 +57,7 @@ object ConfigManager {
             put("channels", channelsArr)
 
             val configsArr = JSONArray()
-            configs.forEach { cfg ->
+            config.keywordConfigs.forEach { cfg ->
                 configsArr.put(JSONObject().apply {
                     put("id", cfg.id)
                     put("keyword", cfg.keyword)
@@ -80,19 +66,19 @@ object ConfigManager {
             }
             put("keywordConfigs", configsArr)
 
-            put("showReceiverPhone", showReceiverPhone)
-            put("showSenderPhone", showSenderPhone)
-            put("highlightVerificationCode", highlightVerificationCode)
-            put("batteryReminderEnabled", batteryReminderEnabled)
-            put("lowBatteryReminderEnabled", lowBatteryReminderEnabled)
-            put("highBatteryReminderEnabled", highBatteryReminderEnabled)
-            put("chargingReminderEnabled", chargingReminderEnabled)
-            if (batteryReminderChannelId != null) put("batteryReminderChannelId", batteryReminderChannelId)
-            put("lowBatteryThreshold", lowBatteryThreshold)
-            put("highBatteryThreshold", highBatteryThreshold)
-            if (customSim1Phone != null) put("customSim1Phone", customSim1Phone)
-            if (customSim2Phone != null) put("customSim2Phone", customSim2Phone)
-            put("startOnBoot", startOnBoot)
+            put("showReceiverPhone", config.showReceiverPhone)
+            put("showSenderPhone", config.showSenderPhone)
+            put("highlightVerificationCode", config.highlightVerificationCode)
+            put("batteryReminderEnabled", config.batteryReminderEnabled)
+            put("lowBatteryReminderEnabled", config.lowBatteryReminderEnabled)
+            put("highBatteryReminderEnabled", config.highBatteryReminderEnabled)
+            put("chargingReminderEnabled", config.chargingReminderEnabled)
+            if (config.batteryReminderChannelId != null) put("batteryReminderChannelId", config.batteryReminderChannelId)
+            put("lowBatteryThreshold", config.lowBatteryThreshold)
+            put("highBatteryThreshold", config.highBatteryThreshold)
+            if (config.customSim1Phone != null) put("customSim1Phone", config.customSim1Phone)
+            if (config.customSim2Phone != null) put("customSim2Phone", config.customSim2Phone)
+            put("startOnBoot", config.startOnBoot)
         }.toString(2) // 格式化输出，便于阅读
     }
 
@@ -101,28 +87,9 @@ object ConfigManager {
      */
     fun exportConfig(
         context: Context,
-        channels: List<Channel>,
-        configs: List<KeywordConfig>,
-        showReceiverPhone: Boolean,
-        showSenderPhone: Boolean,
-        highlightVerificationCode: Boolean,
-        batteryReminderEnabled: Boolean,
-        lowBatteryReminderEnabled: Boolean,
-        highBatteryReminderEnabled: Boolean,
-        chargingReminderEnabled: Boolean,
-        batteryReminderChannelId: String?,
-        lowBatteryThreshold: Int,
-        highBatteryThreshold: Int,
-        customSim1Phone: String?,
-        customSim2Phone: String?,
-        startOnBoot: Boolean
+        config: ExportConfig
     ) {
-        val jsonStr = generateConfigJson(
-            channels, configs, showReceiverPhone, showSenderPhone, highlightVerificationCode,
-            batteryReminderEnabled, lowBatteryReminderEnabled, highBatteryReminderEnabled,
-            chargingReminderEnabled, batteryReminderChannelId, lowBatteryThreshold,
-            highBatteryThreshold, customSim1Phone, customSim2Phone, startOnBoot
-        )
+        val jsonStr = generateConfigJson(config)
 
         try {
             val fileName = "sms_forwarder_config_${System.currentTimeMillis()}.json"

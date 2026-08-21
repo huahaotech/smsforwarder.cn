@@ -28,12 +28,14 @@ object HttpClient {
      * - 调用超时：20秒
      * - 连接超时：10秒
      * - 读取超时：20秒
+     * - 写入超时：20秒
      */
     val instance: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .callTimeout(com.lanbing.smsforwarder.Constants.CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .connectTimeout(com.lanbing.smsforwarder.Constants.CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(com.lanbing.smsforwarder.Constants.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(com.lanbing.smsforwarder.Constants.READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
     }
 }

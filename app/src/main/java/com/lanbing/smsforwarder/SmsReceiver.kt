@@ -22,6 +22,8 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.lanbing.smsforwarder.utils.ChannelLoader
+import com.lanbing.smsforwarder.utils.NetworkMonitor
+import com.lanbing.smsforwarder.utils.SimInfoUtils
 import com.lanbing.smsforwarder.utils.WebhookSender
 import org.json.JSONArray
 import org.json.JSONObject
@@ -48,7 +50,8 @@ class SmsReceiver : BroadcastReceiver() {
         // 固定线程池避免线程爆炸
         private val executor = Executors.newFixedThreadPool(Constants.THREAD_POOL_SIZE)
 
-        // 消息去重缓存：key = sender+content_hash, value = timestamp
+        // 消息去重缓存：key = sender + "|" + content，value = timestamp
+        // 使用完整内容而非 hashCode，避免哈希碰撞导致不同短信被误判为重复
         private val recentMessages = ConcurrentHashMap<String, Long>()
         private var lastCleanupTime = 0L
         private const val CLEANUP_INTERVAL_MS = 60000L // 1分钟清理一次
@@ -201,7 +204,7 @@ class SmsReceiver : BroadcastReceiver() {
             recentMessages.entries.removeIf { (now - it.value) > Constants.DUPLICATE_WINDOW_MS * 2 }
         }
 
-        // 供 NetworkChangeReceiver 和定时任务调用，重试失败的消息
+        // 供 NetworkMonitor 和定时任务调用，重试失败的消息
         @JvmStatic
         fun retryFailedMessages(context: Context, forceAll: Boolean = false) {
             loadFailedMessages(context)
@@ -215,7 +218,7 @@ class SmsReceiver : BroadcastReceiver() {
                 }
 
                 // 定时重试时，先检查网络是否可用，没网就跳过，不消耗重试次数
-                if (!forceAll && !NetworkChangeReceiver.isNetworkAvailable(context)) {
+                if (!forceAll && !NetworkMonitor.isNetworkAvailable(context)) {
                     return
                 }
 
@@ -295,9 +298,10 @@ class SmsReceiver : BroadcastReceiver() {
         val showSenderPhone = prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)
         val highlightVerificationCode = prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)
 
-        // 使用 ChannelLoader 工具类加载配置
+        // 使用 ChannelLoader 工具类加载配置（带内存缓存）
         val channels = ChannelLoader.loadChannels(prefs)
         val configs = ChannelLoader.loadConfigs(prefs)
+        val channelMap = ChannelLoader.getChannelMap(prefs)
 
         if (channels.isEmpty() || configs.isEmpty()) {
             LogStore.append(context, "未配置通道或关键词规则，已跳过转发")
@@ -347,10 +351,10 @@ class SmsReceiver : BroadcastReceiver() {
         val fullMessage = normalizeContent(sb.toString())
 
         // 获取接收短信的本机号码
-        val receiverPhoneNumber = if (showReceiverPhone) getReceiverPhoneNumber(context, subscriptionId) else null
+        val receiverPhoneNumber = if (showReceiverPhone) SimInfoUtils.getReceiverPhoneNumber(context, subscriptionId, prefs) else null
 
-        // 消息去重检查
-        val messageKey = "${sender}_${fullMessage.hashCode()}"
+        // 消息去重检查：使用发送者 + 完整内容作为 key，避免哈希碰撞
+        val messageKey = "${sender}|${fullMessage}"
         val now = System.currentTimeMillis()
         synchronized(recentMessages) {
             cleanupRecentMessages()
@@ -362,13 +366,13 @@ class SmsReceiver : BroadcastReceiver() {
             recentMessages[messageKey] = now
         }
 
-        // 收集所有匹配项
+        // 收集所有匹配项：使用 channelMap O(1) 查找替代 channels.find 线性搜索
         val matched = mutableListOf<Pair<Channel, KeywordConfig>>()
         configs.forEach { cfg ->
             val kw = cfg.keyword.trim()
             val match = if (kw.isEmpty()) true else fullMessage.contains(kw, ignoreCase = true)
             if (match) {
-                val ch = channels.find { it.id == cfg.channelId }
+                val ch = channelMap[cfg.channelId]
                 if (ch != null) matched.add(Pair(ch, cfg))
             }
         }
@@ -449,96 +453,5 @@ class SmsReceiver : BroadcastReceiver() {
         return s.replace("\r", "")
             .replace(Regex("\n{2,}"), "\n")
             .trim()
-    }
-
-    /**
-     * 获取接收短信的本机号码
-     * @param subscriptionId SIM 卡的 subscriptionId，用于确定是哪个 SIM 卡接收的短信
-     */
-    private fun getReceiverPhoneNumber(context: Context, subscriptionId: Int?): String? {
-        try {
-            val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-
-            var simSlotIndex = 1 // 默认假设是 SIM1
-            var foundMatchingSim = false
-
-            // 根据 subscriptionId 确定 SIM 卡槽位置
-            if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                try {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                        @Suppress("DEPRECATION")
-                        val subscriptionManager = SubscriptionManager.from(context)
-                        val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
-                        if (activeSubscriptions != null) {
-                            activeSubscriptions.forEachIndexed { index, subInfo ->
-                                try {
-                                    if (subInfo != null && subInfo.subscriptionId == subscriptionId) {
-                                        simSlotIndex = index + 1 // slot 从 1 开始
-                                        foundMatchingSim = true
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "检查 subscriptionInfo 失败", e)
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "确定 SIM 卡槽位置失败", e)
-                }
-            }
-
-            // 根据 SIM 卡槽位置返回对应的自定义号码
-            if (simSlotIndex == 1) {
-                val customSim1Phone = prefs.getString(Constants.PREF_CUSTOM_SIM1_PHONE, null)
-                if (!customSim1Phone.isNullOrBlank()) {
-                    return customSim1Phone
-                }
-            } else if (simSlotIndex == 2) {
-                val customSim2Phone = prefs.getString(Constants.PREF_CUSTOM_SIM2_PHONE, null)
-                if (!customSim2Phone.isNullOrBlank()) {
-                    return customSim2Phone
-                }
-            }
-
-            // 如果没有自定义号码，但找到了匹配的 SIM，尝试自动获取
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                // 如果有 subscriptionId，尝试通过 subscriptionId 获取号码
-                if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 && foundMatchingSim) {
-                    try {
-                        @Suppress("DEPRECATION")
-                        val subscriptionManager = SubscriptionManager.from(context)
-                        val subInfo = subscriptionManager.getActiveSubscriptionInfo(subscriptionId)
-                        if (subInfo != null) {
-                            @Suppress("DEPRECATION")
-                            val number = subInfo.number
-                            if (!number.isNullOrBlank()) {
-                                return number
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "通过 subscriptionId 获取号码失败", e)
-                    }
-                }
-
-                // 回退到默认的获取方式
-                try {
-                    val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                    if (telephonyManager != null) {
-                        @Suppress("DEPRECATION")
-                        val number = telephonyManager.line1Number
-                        if (!number.isNullOrBlank()) {
-                            return number
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "通过 TelephonyManager 获取号码失败", e)
-                }
-            } else {
-                LogStore.append(context, "缺少 READ_PHONE_STATE 权限，无法自动获取本机号码")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "获取本机号码失败", e)
-        }
-        return null
     }
 }

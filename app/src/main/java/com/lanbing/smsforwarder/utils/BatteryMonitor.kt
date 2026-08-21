@@ -10,18 +10,13 @@
 
 package com.lanbing.smsforwarder.utils
 
-import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
-import android.telephony.SubscriptionManager
-import android.telephony.TelephonyManager
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.lanbing.smsforwarder.ChannelType
 import com.lanbing.smsforwarder.Constants
 import com.lanbing.smsforwarder.LogStore
@@ -80,7 +75,7 @@ class BatteryMonitor(private val context: Context) {
                 val lastLowRemind = prefs.getInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, -1)
                 val lastHighRemind = prefs.getInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, -1)
 
-                val phoneInfo = getSimPhoneInfo(context, prefs)
+                val phoneInfo = SimInfoUtils.getSimPhoneInfo(context, prefs)
 
                 // 低电量提醒
                 if (batteryEnabled && lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
@@ -269,75 +264,6 @@ class BatteryMonitor(private val context: Context) {
             } catch (t: Throwable) {
                 Log.e(TAG, "发送电量提醒失败", t)
             }
-        }
-    }
-
-    /**
-     * 获取 SIM 卡号码信息，用于在提醒消息中标识设备
-     */
-    private fun getSimPhoneInfo(context: Context, prefs: android.content.SharedPreferences): String {
-        val phoneNumbers = mutableListOf<String>()
-
-        // 优先使用自定义的 SIM 卡号码
-        val customSim1Phone = prefs.getString(Constants.PREF_CUSTOM_SIM1_PHONE, null)
-        val customSim2Phone = prefs.getString(Constants.PREF_CUSTOM_SIM2_PHONE, null)
-
-        if (!customSim1Phone.isNullOrBlank()) {
-            phoneNumbers.add(customSim1Phone)
-        }
-        if (!customSim2Phone.isNullOrBlank()) {
-            phoneNumbers.add(customSim2Phone)
-        }
-
-        // 如果有自定义号码，直接返回
-        if (phoneNumbers.isNotEmpty()) {
-            return phoneNumbers.joinToString(" / ")
-        }
-
-        // 尝试自动获取 SIM 卡号码
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            return ""
-        }
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                @Suppress("DEPRECATION")
-                val subscriptionManager = SubscriptionManager.from(context)
-                val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
-                if (activeSubscriptions != null) {
-                    activeSubscriptions.forEach { subInfo ->
-                        try {
-                            @Suppress("DEPRECATION")
-                            if (subInfo != null && !subInfo.number.isNullOrBlank()) {
-                                @Suppress("DEPRECATION")
-                                phoneNumbers.add(subInfo.number)
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "获取 SIM 卡号码失败", e)
-                        }
-                    }
-                }
-            }
-
-            // 如果没有从 SubscriptionManager 获取到，尝试从 TelephonyManager 获取
-            if (phoneNumbers.isEmpty()) {
-                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                if (telephonyManager != null) {
-                    @Suppress("DEPRECATION")
-                    val number = telephonyManager.line1Number
-                    if (!number.isNullOrBlank()) {
-                        phoneNumbers.add(number)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "获取 SIM 卡信息失败", e)
-        }
-
-        return if (phoneNumbers.isNotEmpty()) {
-            phoneNumbers.joinToString(" / ")
-        } else {
-            ""
         }
     }
 }

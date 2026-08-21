@@ -20,10 +20,28 @@ package com.lanbing.smsforwarder.utils
  */
 object VerificationCodeExtractor {
 
-    // 常见的验证码关键词
+    // 常见的验证码关键词（唯一数据源，正则模式自动从这里构建）
     private val keywords = listOf(
-        "验证码", "校验码", "动态码", "验证 code", "verification code", "verify code"
+        "验证码", "校验码", "动态码", "验证", "verification", "verify"
     )
+
+    // 从关键词构建的正则模式（懒加载，只构建一次）
+    private val keywordPattern by lazy {
+        keywords.joinToString("|") { Regex.escape(it) }
+    }
+
+    // 预编译的正则表达式，避免每次调用都重新编译
+    private val patternAdjacent by lazy {
+        Regex("""(?:$keywordPattern)[^\d]*(\d{4,8})""", RegexOption.IGNORE_CASE)
+    }
+
+    private val patternNearby by lazy {
+        Regex("""(?:$keywordPattern).{0,30}?(\d{4,8})""", RegexOption.IGNORE_CASE)
+    }
+
+    private val patternStandalone by lazy {
+        Regex("""\b(\d{4,8})\b""")
+    }
 
     /**
      * 从短信内容中提取验证码
@@ -36,26 +54,16 @@ object VerificationCodeExtractor {
     fun extract(content: String): String? {
         val hasKeyword = keywords.any { content.contains(it, ignoreCase = true) }
 
-        // 优先匹配：关键词后紧跟的 4-8 位数字
         if (hasKeyword) {
             // 模式1：关键词后面直接跟数字（如"验证码是123456"）
-            val pattern1 = Regex(
-                """(?:验证码|校验码|动态码|验证|verification|verify)[^\d]*(\d{4,8})""",
-                RegexOption.IGNORE_CASE
-            )
-            pattern1.find(content)?.let { return it.groupValues[1] }
+            patternAdjacent.find(content)?.let { return it.groupValues[1] }
 
             // 模式2：关键词附近的数字（关键词后30字符内）
-            val pattern2 = Regex(
-                """(?:验证码|校验码|动态码|验证|verification|verify).{0,30}?(\d{4,8})""",
-                RegexOption.IGNORE_CASE
-            )
-            pattern2.find(content)?.let { return it.groupValues[1] }
+            patternNearby.find(content)?.let { return it.groupValues[1] }
         }
 
         // 匹配独立的4-8位数字（作为备选）
-        val pattern3 = Regex("""\b(\d{4,8})\b""")
-        val matches = pattern3.findAll(content).map { it.groupValues[1] }.toList()
+        val matches = patternStandalone.findAll(content).map { it.groupValues[1] }.toList()
 
         // 如果有多个匹配，返回最长的那个（更可能是验证码）
         if (matches.isNotEmpty()) {

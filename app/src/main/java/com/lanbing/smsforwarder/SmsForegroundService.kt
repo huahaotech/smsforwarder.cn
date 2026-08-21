@@ -51,7 +51,7 @@ class SmsForegroundService : Service() {
         private val retryRunnable = object : Runnable {
             override fun run() {
                 try {
-                    val ctx = context
+                    val ctx = appContext
                     if (ctx != null) {
                         executor.execute {
                             SmsReceiver.retryFailedMessages(ctx, forceAll = false)
@@ -65,28 +65,13 @@ class SmsForegroundService : Service() {
             }
         }
         private var retryStarted = false
-        private var context: Context? = null
 
-        // 网络状态追踪
-        private var lastNetworkAvailable = false
-        private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {
-                if (!lastNetworkAvailable) {
-                    lastNetworkAvailable = true
-                    LogStore.append(context ?: return, "网络已恢复，正在重试失败转发")
-                    executor.execute {
-                        SmsReceiver.retryFailedMessages(context ?: return@execute, forceAll = true)
-                    }
-                }
-            }
-
-            override fun onLost(network: android.net.Network) {
-                lastNetworkAvailable = false
-            }
-        }
+        // 使用 ApplicationContext，避免持有 Service 实例导致泄漏
+        // ApplicationContext 生命周期与进程一致，不会造成内存泄漏
+        private var appContext: Context? = null
 
         fun startPeriodicRetry(ctx: Context) {
-            context = ctx.applicationContext
+            appContext = ctx.applicationContext
             if (!retryStarted) {
                 retryHandler.post(retryRunnable)
                 retryStarted = true
@@ -94,7 +79,7 @@ class SmsForegroundService : Service() {
             } else {
                 // 已启动，立即触发一次重试（确保新保存的失败消息尽快被重试）
                 executor.execute {
-                    SmsReceiver.retryFailedMessages(context ?: return@execute, forceAll = false)
+                    SmsReceiver.retryFailedMessages(appContext ?: return@execute, forceAll = false)
                 }
             }
         }
@@ -103,7 +88,7 @@ class SmsForegroundService : Service() {
             if (retryStarted) {
                 retryHandler.removeCallbacks(retryRunnable)
                 retryStarted = false
-                LogStore.append(context ?: return, "定时重试已停止")
+                LogStore.append(appContext ?: return, "定时重试已停止")
             }
         }
     }
@@ -134,6 +119,24 @@ class SmsForegroundService : Service() {
     }
 
     private var lastNotifState: Boolean? = null
+
+    // 网络状态追踪（实例级别，与服务生命周期一致）
+    private var lastNetworkAvailable = false
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) {
+            if (!lastNetworkAvailable) {
+                lastNetworkAvailable = true
+                LogStore.append(applicationContext, "网络已恢复，正在重试失败转发")
+                executor.execute {
+                    SmsReceiver.retryFailedMessages(applicationContext, forceAll = true)
+                }
+            }
+        }
+
+        override fun onLost(network: android.net.Network) {
+            lastNetworkAvailable = false
+        }
+    }
 
     // 电量监控器（从 Service 中抽离的独立模块）
     private lateinit var batteryMonitor: BatteryMonitor
@@ -296,20 +299,6 @@ class SmsForegroundService : Service() {
             Log.w(TAG, "通过反射读取FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING失败: ${t.message}")
             0
         }
-    }
-
-    /**
-     * 保留 resolveSmallIcon 作为极小概率回退（仍优先使用编译时资源），但通知构建处已直接使用 R.drawable.ic_stat_notification
-     */
-    private fun resolveSmallIcon(): Int {
-        val statDrawable = resources.getIdentifier("ic_stat_notification", "drawable", packageName)
-        if (statDrawable != 0) return statDrawable
-        val statMipmap = resources.getIdentifier("ic_stat_notification", "mipmap", packageName)
-        if (statMipmap != 0) return statMipmap
-
-        val appIcon = applicationInfo.icon
-        if (appIcon != 0) return appIcon
-        return android.R.drawable.ic_dialog_info
     }
 
     private fun buildNotification(): Notification {
