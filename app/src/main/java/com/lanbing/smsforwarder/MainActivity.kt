@@ -1390,18 +1390,22 @@ fun PrivacyPolicyDialog(
     onDisagree: () -> Unit,
     isViewOnly: Boolean = false
 ) {
-    Dialog(onDismissRequest = { if (isViewOnly) onAgree() }) {
+    Dialog(
+        onDismissRequest = { if (isViewOnly) onAgree() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            shadowElevation = 16.dp,
+            modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surface
         ) {
-            Column(modifier = Modifier.fillMaxHeight()) {
-                Column(modifier = Modifier.padding(24.dp)) {
+            Column(modifier = Modifier
+                .fillMaxHeight()
+                .systemBarsPadding()
+            ) {
+                Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp)) {
                     Text(
                         "隐私政策",
                         style = MaterialTheme.typography.headlineSmall,
@@ -1616,7 +1620,7 @@ fun PrivacyPolicyDialog(
                 
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
                 
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)) {
                     if (isViewOnly) {
                         Button(
                             onClick = onAgree,
