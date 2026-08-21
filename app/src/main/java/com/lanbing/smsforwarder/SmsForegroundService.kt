@@ -10,7 +10,6 @@
 
 package com.lanbing.smsforwarder
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -19,33 +18,22 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
-import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.telephony.SubscriptionManager
-import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import android.app.PendingIntent
 import android.provider.Settings
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
+import com.lanbing.smsforwarder.utils.BatteryMonitor
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 class SmsForegroundService : Service() {
 
@@ -53,12 +41,11 @@ class SmsForegroundService : Service() {
         const val ACTION_UPDATE = "com.lanbing.smsforwarder.ACTION_LOG_UPDATED"
         const val ACTION_STOP = "com.lanbing.smsforwarder.ACTION_STOP_SERVICE"
         private const val TAG = "SmsForegroundService"
-        private const val TAG_BATTERY = "BatteryReceiver"
         private var lastNotificationUpdateTime = 0L
-        
+
         // 固定线程池避免线程爆炸
         private val executor = Executors.newFixedThreadPool(Constants.THREAD_POOL_SIZE)
-        
+
         // 定时重试相关
         private val retryHandler = Handler(Looper.getMainLooper())
         private val retryRunnable = object : Runnable {
@@ -97,7 +84,7 @@ class SmsForegroundService : Service() {
                 lastNetworkAvailable = false
             }
         }
-        
+
         fun startPeriodicRetry(ctx: Context) {
             context = ctx.applicationContext
             if (!retryStarted) {
@@ -111,7 +98,7 @@ class SmsForegroundService : Service() {
                 }
             }
         }
-        
+
         fun stopPeriodicRetry() {
             if (retryStarted) {
                 retryHandler.removeCallbacks(retryRunnable)
@@ -138,7 +125,7 @@ class SmsForegroundService : Service() {
                 } else {
                     stopPeriodicRetry()
                 }
-                updateBatteryReceiverRegistration()
+                updateBatteryMonitorRegistration()
                 updateNotification()
             } catch (t: Throwable) {
                 Log.w(TAG, "更新通知失败", t)
@@ -146,307 +133,17 @@ class SmsForegroundService : Service() {
         }
     }
 
-    private var batteryReceiverRegistered = false
     private var lastNotifState: Boolean? = null
 
-    private val batteryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            try {
-                if (intent == null || context == null) return
-                val action = intent.action
-                if (action != Intent.ACTION_BATTERY_CHANGED) return
-
-                val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-                val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
-                val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
-                
-                if (!batteryEnabled && !chargingReminderEnabled) {
-                    return
-                }
-
-                val lowBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)
-                val highBatteryReminderEnabled = prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)
-                val lowThreshold = prefs.getInt(Constants.PREF_LOW_BATTERY_THRESHOLD, Constants.DEFAULT_LOW_BATTERY_THRESHOLD)
-                val highThreshold = prefs.getInt(Constants.PREF_HIGH_BATTERY_THRESHOLD, Constants.DEFAULT_HIGH_BATTERY_THRESHOLD)
-
-                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                if (level == -1 || scale == -1) {
-                    Log.w(TAG_BATTERY, "无法获取电量信息")
-                    return
-                }
-
-                val batteryPercent = (level * 100 / scale)
-                val lastLowRemind = prefs.getInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, -1)
-                val lastHighRemind = prefs.getInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, -1)
-
-                val phoneInfo = getSimPhoneInfo(context, prefs)
-
-                // 低电量提醒
-                if (batteryEnabled && lowBatteryReminderEnabled && batteryPercent <= lowThreshold) {
-                    if (lastLowRemind == -1 || lastLowRemind > lowThreshold) {
-                        var message = "【电量提醒】当前电量：$batteryPercent%，电量较低，请及时充电"
-                        if (phoneInfo.isNotEmpty()) {
-                            message += "\n设备：$phoneInfo"
-                        }
-                        sendBatteryReminder(context, message)
-                        prefs.edit().putInt(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL, batteryPercent).apply()
-                        LogStore.append(context, "电量提醒：低电量 $batteryPercent%")
-                    }
-                } else if (batteryEnabled) {
-                    if (lastLowRemind != -1) {
-                        prefs.edit().remove(Constants.PREF_LAST_LOW_BATTERY_REMIND_LEVEL).apply()
-                    }
-                }
-
-                // 高电量提醒
-                if (batteryEnabled && highBatteryReminderEnabled && batteryPercent >= highThreshold) {
-                    if (lastHighRemind == -1 || lastHighRemind < highThreshold) {
-                        var message = "【电量提醒】当前电量：$batteryPercent%，电量充足"
-                        if (phoneInfo.isNotEmpty()) {
-                            message += "\n设备：$phoneInfo"
-                        }
-                        sendBatteryReminder(context, message)
-                        prefs.edit().putInt(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL, batteryPercent).apply()
-                        LogStore.append(context, "电量提醒：高电量 $batteryPercent%")
-                    }
-                } else if (batteryEnabled) {
-                    if (lastHighRemind != -1) {
-                        prefs.edit().remove(Constants.PREF_LAST_HIGH_BATTERY_REMIND_LEVEL).apply()
-                    }
-                }
-
-                // 充电状态变化监测（独立于电量提醒主开关）
-                if (chargingReminderEnabled) {
-                    val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
-                    val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
-                    val isCharging = plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
-                    val lastChargingState = prefs.getBoolean(Constants.PREF_LAST_CHARGING_STATE, false)
-                    
-                    if (isCharging && !lastChargingState) {
-                        val chargeType = when {
-                            plugged == BatteryManager.BATTERY_PLUGGED_AC -> "AC充电"
-                            plugged == BatteryManager.BATTERY_PLUGGED_USB -> "USB充电"
-                            plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS -> "无线充电"
-                            status == BatteryManager.BATTERY_STATUS_CHARGING -> "充电"
-                            else -> "充电"
-                        }
-                        var message = "【充电提醒】设备已开始${chargeType}，当前电量：$batteryPercent%"
-                        if (phoneInfo.isNotEmpty()) {
-                            message += "\n设备：$phoneInfo"
-                        }
-                        sendBatteryReminder(context, message)
-                        prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, true).apply()
-                        LogStore.append(context, "充电提醒：已开始${chargeType}，电量 $batteryPercent%")
-                    } else if (!isCharging && lastChargingState) {
-                        var message = "【充电提醒】设备已结束充电，当前电量：$batteryPercent%"
-                        if (phoneInfo.isNotEmpty()) {
-                            message += "\n设备：$phoneInfo"
-                        }
-                        sendBatteryReminder(context, message)
-                        prefs.edit().putBoolean(Constants.PREF_LAST_CHARGING_STATE, false).apply()
-                        LogStore.append(context, "充电提醒：已结束充电，电量 $batteryPercent%")
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.e(TAG_BATTERY, "处理电量变化失败", t)
-            }
-        }
-    }
-
-    private val httpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-    }
-
-    private val JSON = "application/json; charset=utf-8".toMediaType()
-
-    private fun sendBatteryReminder(context: Context, message: String) {
-        executor.execute {
-            try {
-                val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-                val channels = loadChannels(prefs)
-                if (channels.isEmpty()) {
-                    LogStore.append(context, "电量提醒：未配置转发通道，提醒无法发送，请先配置通道")
-                    return@execute
-                }
-
-                val reminderChannelId = prefs.getString(Constants.PREF_BATTERY_REMINDER_CHANNEL_ID, null)
-                val targetChannels = if (reminderChannelId.isNullOrEmpty()) {
-                    channels
-                } else {
-                    val filtered = channels.filter { it.id == reminderChannelId }
-                    if (filtered.isEmpty()) {
-                        LogStore.append(context, "电量提醒：指定的通道不存在，已跳过")
-                        channels
-                    } else {
-                        filtered
-                    }
-                }
-
-                if (targetChannels.isEmpty()) {
-                    LogStore.append(context, "电量提醒：无可用通道，已跳过")
-                    return@execute
-                }
-
-                targetChannels.forEach { channel ->
-                    try {
-                        val jsonObject = when (channel.type) {
-                            ChannelType.WECHAT -> buildWechatMessage(message)
-                            ChannelType.DINGTALK -> buildDingtalkMessage(message)
-                            ChannelType.FEISHU -> buildFeishuMessage(message)
-                            ChannelType.GENERIC_WEBHOOK -> buildWebhookMessage(message)
-                        }
-                        val body = jsonObject.toString().toRequestBody(JSON)
-                        val request = Request.Builder()
-                            .url(channel.target)
-                            .post(body)
-                            .build()
-
-                        httpClient.newCall(request).execute().use { response ->
-                            if (response.isSuccessful) {
-                                LogStore.append(context, "电量提醒发送成功 -> ${channel.name}")
-                            } else {
-                                val errorBody = try { response.body?.string()?.take(200) } catch (_: Exception) { "无法读取响应" }
-                                LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: HTTP ${response.code} ${errorBody ?: ""}")
-                            }
-                        }
-                    } catch (e: java.net.SocketTimeoutException) {
-                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 连接超时")
-                    } catch (e: java.net.UnknownHostException) {
-                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 域名解析失败")
-                    } catch (e: java.io.IOException) {
-                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: 网络错误: ${e.message}")
-                    } catch (t: Throwable) {
-                        Log.w(TAG_BATTERY, "发送到 ${channel.name} 失败", t)
-                        LogStore.append(context, "电量提醒发送失败 -> ${channel.name}: ${t.message ?: t.javaClass.simpleName}")
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.e(TAG_BATTERY, "发送电量提醒失败", t)
-            }
-        }
-    }
-
-    private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> {
-        val arrStr = prefs.getString(Constants.PREF_CHANNELS, "[]") ?: "[]"
-        return try {
-            val arr = JSONArray(arrStr)
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                val typeStr = o.optString("type", "WECHAT")
-                val type = try { ChannelType.valueOf(typeStr) } catch (t: Throwable) { ChannelType.WECHAT }
-                Channel(o.getString("id"), o.getString("name"), type, o.getString("target"))
-            }
-        } catch (t: Throwable) {
-            emptyList()
-        }
-    }
-
-    private fun buildWechatMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("content", message)
-        json.put("msgtype", "text")
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildDingtalkMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("content", message)
-        json.put("msgtype", "text")
-        json.put("text", text)
-        return json
-    }
-
-    private fun buildFeishuMessage(message: String): JSONObject {
-        val json = JSONObject()
-        val text = JSONObject()
-        text.put("text", message)
-        json.put("msg_type", "text")
-        json.put("content", text)
-        return json
-    }
-
-    private fun buildWebhookMessage(message: String): JSONObject {
-        val json = JSONObject()
-        json.put("message", message)
-        return json
-    }
-
-    private fun getSimPhoneInfo(context: Context, prefs: android.content.SharedPreferences): String {
-        val phoneNumbers = mutableListOf<String>()
-        
-        // 优先使用自定义的 SIM 卡号码
-        val customSim1Phone = prefs.getString(Constants.PREF_CUSTOM_SIM1_PHONE, null)
-        val customSim2Phone = prefs.getString(Constants.PREF_CUSTOM_SIM2_PHONE, null)
-        
-        if (!customSim1Phone.isNullOrBlank()) {
-            phoneNumbers.add(customSim1Phone)
-        }
-        if (!customSim2Phone.isNullOrBlank()) {
-            phoneNumbers.add(customSim2Phone)
-        }
-        
-        // 如果有自定义号码，直接返回
-        if (phoneNumbers.isNotEmpty()) {
-            return phoneNumbers.joinToString(" / ")
-        }
-        
-        // 尝试自动获取 SIM 卡号码
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            return ""
-        }
-        
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP_MR1) {
-                @Suppress("DEPRECATION")
-                val subscriptionManager = SubscriptionManager.from(context)
-                val activeSubscriptions = subscriptionManager.activeSubscriptionInfoList
-                if (activeSubscriptions != null) {
-                    activeSubscriptions.forEach { subInfo ->
-                        try {
-                            @Suppress("DEPRECATION")
-                            if (subInfo != null && !subInfo.number.isNullOrBlank()) {
-                                @Suppress("DEPRECATION")
-                                phoneNumbers.add(subInfo.number)
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG_BATTERY, "获取 SIM 卡号码失败", e)
-                        }
-                    }
-                }
-            }
-            
-            // 如果没有从 SubscriptionManager 获取到，尝试从 TelephonyManager 获取
-            if (phoneNumbers.isEmpty()) {
-                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                if (telephonyManager != null) {
-                    @Suppress("DEPRECATION")
-                    val number = telephonyManager.line1Number
-                    if (!number.isNullOrBlank()) {
-                        phoneNumbers.add(number)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG_BATTERY, "获取 SIM 卡信息失败", e)
-        }
-        
-        return if (phoneNumbers.isNotEmpty()) {
-            phoneNumbers.joinToString(" / ")
-        } else {
-            ""
-        }
-    }
+    // 电量监控器（从 Service 中抽离的独立模块）
+    private lateinit var batteryMonitor: BatteryMonitor
 
     override fun onCreate() {
         super.onCreate()
+
+        // 初始化电量监控器
+        batteryMonitor = BatteryMonitor(this)
+
         createChannel()
         try {
             val filter = IntentFilter().apply {
@@ -457,7 +154,7 @@ class SmsForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG, "注册接收器失败", t)
         }
-        updateBatteryReceiverRegistration()
+        updateBatteryMonitorRegistration()
 
         // 注册 NetworkCallback 监听网络变化（比广播更可靠）
         try {
@@ -471,62 +168,23 @@ class SmsForegroundService : Service() {
         }
     }
 
-    private fun updateBatteryReceiverRegistration() {
+    /**
+     * 根据配置更新电量监控器的注册状态
+     */
+    private fun updateBatteryMonitorRegistration() {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
         val batteryEnabled = prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)
         val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
         val shouldRegister = batteryEnabled || chargingReminderEnabled
 
         if (shouldRegister) {
-            if (!batteryReceiverRegistered) {
-                try {
-                    val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-                    registerReceiver(batteryReceiver, batteryFilter)
-                    batteryReceiverRegistered = true
-                    if (chargingReminderEnabled) {
-                        initializeChargingState()
-                    }
-                    LogStore.append(this, "电量监听器已注册")
-                } catch (t: Throwable) {
-                    Log.w(TAG_BATTERY, "注册电量监听器失败", t)
-                }
+            if (!batteryMonitor.isActive()) {
+                batteryMonitor.register(initializeChargingState = true)
             }
         } else {
-            if (batteryReceiverRegistered) {
-                try {
-                    unregisterReceiver(batteryReceiver)
-                } catch (_: Exception) { /* already unregistered */ }
-                batteryReceiverRegistered = false
-                LogStore.append(this, "电量监听器已注销")
+            if (batteryMonitor.isActive()) {
+                batteryMonitor.unregister()
             }
-        }
-    }
-
-    private fun initializeChargingState() {
-        try {
-            val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-            val chargingReminderEnabled = prefs.getBoolean(Constants.PREF_CHARGING_REMINDER_ENABLED, false)
-            if (!chargingReminderEnabled) return
-            
-            val lastStateInitialized = prefs.getBoolean(Constants.PREF_LAST_CHARGING_STATE_INITIALIZED, false)
-            if (lastStateInitialized) return
-            
-            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            val isCharging = if (batteryIntent != null) {
-                val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
-                val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
-                plugged != 0 || status == BatteryManager.BATTERY_STATUS_CHARGING
-            } else {
-                false
-            }
-            
-            prefs.edit()
-                .putBoolean(Constants.PREF_LAST_CHARGING_STATE, isCharging)
-                .putBoolean(Constants.PREF_LAST_CHARGING_STATE_INITIALIZED, true)
-                .apply()
-            LogStore.append(this, "初始化充电状态: isCharging=$isCharging")
-        } catch (t: Throwable) {
-            Log.w(TAG_BATTERY, "初始化充电状态失败", t)
         }
     }
 
@@ -542,7 +200,7 @@ class SmsForegroundService : Service() {
                         importance
                     )
                     channel.setShowBadge(false)
-                    channel.lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+                    channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                     nm.createNotificationChannel(channel)
                 } else {
                     Log.w(TAG, "创建通道时NotificationManager为null")
@@ -735,7 +393,8 @@ class SmsForegroundService : Service() {
         super.onDestroy()
         stopPeriodicRetry()
         try { unregisterReceiver(updateReceiver) } catch (e: Exception) { /* ignore */ }
-        try { unregisterReceiver(batteryReceiver) } catch (e: Exception) { /* ignore */ }
+        // 注销电量监控器
+        try { batteryMonitor.unregister() } catch (e: Exception) { /* ignore */ }
         try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             cm.unregisterNetworkCallback(networkCallback)
