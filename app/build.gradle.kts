@@ -16,8 +16,8 @@ android {
         val versionNameFromProp = (project.findProperty("VERSION_NAME") ?: System.getenv("VERSION_NAME"))?.toString()
         val versionCodeFromProp = (project.findProperty("VERSION_CODE") ?: System.getenv("VERSION_CODE"))?.toString()
 
-        versionName = versionNameFromProp ?: "2.8.2"
-        versionCode = (versionCodeFromProp?.toIntOrNull() ?: 33)
+        versionName = versionNameFromProp ?: "2.9.0"
+        versionCode = (versionCodeFromProp?.toIntOrNull() ?: 34)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -89,6 +89,29 @@ android {
     // 与下面的 Compose 版本保持一致
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.5"
+    }
+    // 排除冗余的 META-INF / license 文件，减小 APK 体积
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1",
+                "META-INF/*.kotlin_module",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/license.txt",
+                "META-INF/notice.txt",
+                "META-INF/ASL2.0",
+                "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties",
+                "META-INF/versions/**",
+                "/kotlin/**",
+                "/kotlin-tooling-metadata.json"
+            )
+        }
     }
 }
 

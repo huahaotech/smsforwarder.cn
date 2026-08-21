@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.8.2-blue.svg)
+![Version](https://img.shields.io/badge/version-2.9.0-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -51,6 +51,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.9.0** | 大幅精简APK体积（7MB→2MB+）；修复电量/充电提醒无法触发的问题；代码架构重构，抽取多个工具类提升可维护性。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.8.2** | 增加充电提醒功能；增加防诈骗提示；重构配置导入导出功能（移除二维码方案，改用文件+文本方式）；优化电量提醒逻辑。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.10** | 隐私合规整改：添加首次运行隐私政策弹窗（纯文本展示）；设置页面添加隐私政策查看入口和撤销同意功能；权限管理页面展示所有权限状态；优化隐私政策弹窗界面 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.7.9** | 隐私合规整改：优化权限申请时机，首次打开不再主动弹窗请求权限；用户点击开启服务时先显示权限说明对话框，引导用户到系统设置手动开启；移除直接系统权限请求弹窗 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |

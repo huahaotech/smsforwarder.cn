@@ -56,7 +56,7 @@ object ConfigManager {
         startOnBoot: Boolean
     ): String {
         return JSONObject().apply {
-            put("version", "2.8.2")
+            put("version", "2.9.0")
             put("exportTime", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
 
             val channelsArr = JSONArray()
