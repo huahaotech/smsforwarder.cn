@@ -634,6 +634,8 @@ fun SmsForwarderApp(
                             } else {
                                 LogStore.append(context, "已关闭电量提醒")
                             }
+                            // 通知服务刷新电量监听器注册状态
+                            context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                         },
                         lowBatteryReminderEnabled = lowBatteryReminderEnabled,
                         onLowBatteryReminderEnabledChange = {
@@ -659,6 +661,8 @@ fun SmsForwarderApp(
                             } else {
                                 LogStore.append(context, "已关闭充电提醒")
                             }
+                            // 通知服务刷新电量监听器注册状态
+                            context.sendBroadcast(Intent(SmsForegroundService.ACTION_UPDATE))
                         },
                         batteryReminderChannelId = batteryReminderChannelId,
                         onBatteryReminderChannelIdChange = {

@@ -281,6 +281,9 @@ class SmsForegroundService : Service() {
             startPeriodicRetry(this)
         }
 
+        // 刷新电量监听器注册状态（确保在服务运行中切换提醒开关时能正确注册/注销）
+        updateBatteryMonitorRegistration()
+
         return START_STICKY
     }
 
