@@ -75,7 +75,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.lanbing.smsforwarder.utils.ChannelLoader
 import com.lanbing.smsforwarder.ExportConfig
+import com.lanbing.smsforwarder.MatchLogic
+import com.lanbing.smsforwarder.MatchMode
+import com.lanbing.smsforwarder.SenderMatchMode
 import com.lanbing.smsforwarder.utils.ConfigManager
+import com.lanbing.smsforwarder.utils.MessageTemplateRenderer
 import com.lanbing.smsforwarder.utils.PermissionUtils
 import com.lanbing.smsforwarder.utils.SimInfoUtils
 import com.lanbing.smsforwarder.utils.WebhookSender
@@ -257,6 +261,14 @@ fun SmsForwarderApp(
 
     var isEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_ENABLED, false)) }
     var startOnBoot by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_START_ON_BOOT, false)) }
+
+    // 发送者黑白名单
+    var senderWhitelist by remember(configUpdateTrigger) {
+        mutableStateOf(loadSenderFilterList(prefs, Constants.PREF_SENDER_WHITELIST))
+    }
+    var senderBlacklist by remember(configUpdateTrigger) {
+        mutableStateOf(loadSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST))
+    }
     var showReceiverPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, true)) }
     var showSenderPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)) }
     var highlightVerificationCode by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)) }
@@ -297,11 +309,18 @@ fun SmsForwarderApp(
     var editChannelName by remember { mutableStateOf("") }
     var editChannelTarget by remember { mutableStateOf("") }
     var editChannelType by remember { mutableStateOf(ChannelType.WECHAT) }
+    var editChannelTemplate by remember { mutableStateOf("") }
 
     var editingConfig by remember { mutableStateOf<KeywordConfig?>(null) }
     var showConfigDialog by remember { mutableStateOf(false) }
     var editConfigKeyword by remember { mutableStateOf("") }
     var editConfigChannelId by remember { mutableStateOf("") }
+    var editConfigMatchMode by remember { mutableStateOf(MatchMode.CONTAINS) }
+    var editConfigMatchLogic by remember { mutableStateOf(MatchLogic.OR) }
+    var editConfigExtraKeywords by remember { mutableStateOf("") }
+    var editConfigSenderPattern by remember { mutableStateOf("") }
+    var editConfigSenderMatchMode by remember { mutableStateOf(SenderMatchMode.CONTAINS) }
+    var editConfigEnabled by remember { mutableStateOf(true) }
 
     // UI state
     var logs by remember { mutableStateOf(LogStore.readAll(context)) }
@@ -556,6 +575,12 @@ fun SmsForwarderApp(
                             editingConfig = cfg
                             editConfigKeyword = cfg.keyword
                             editConfigChannelId = cfg.channelId
+                            editConfigMatchMode = cfg.matchMode
+                            editConfigMatchLogic = cfg.matchLogic
+                            editConfigExtraKeywords = cfg.extraKeywords.joinToString("\n")
+                            editConfigSenderPattern = cfg.senderPattern ?: ""
+                            editConfigSenderMatchMode = cfg.senderMatchMode
+                            editConfigEnabled = cfg.enabled
                             showConfigDialog = true
                         }
                     )
@@ -599,6 +624,7 @@ fun SmsForwarderApp(
                             editChannelName = ch.name
                             editChannelTarget = ch.target
                             editChannelType = ch.type
+                            editChannelTemplate = ch.messageTemplate ?: ""
                             showChannelDialog = true
                         }
                     )
@@ -710,6 +736,18 @@ fun SmsForwarderApp(
                         },
                         onImportConfig = {
                             showImportDialog = true
+                        },
+                        senderWhitelist = senderWhitelist,
+                        onSenderWhitelistChange = { list ->
+                            senderWhitelist = list
+                            saveSenderFilterList(prefs, Constants.PREF_SENDER_WHITELIST, list)
+                            LogStore.append(context, "发送者白名单已更新，共 ${list.size} 条规则")
+                        },
+                        senderBlacklist = senderBlacklist,
+                        onSenderBlacklistChange = { list ->
+                            senderBlacklist = list
+                            saveSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST, list)
+                            LogStore.append(context, "发送者黑名单已更新，共 ${list.size} 条规则")
                         },
                         onStartService = onStartService
                     )
@@ -827,13 +865,63 @@ fun SmsForwarderApp(
                         )
                         else -> {}
                     }
+
+                    // 消息模板
+                    var templateExpanded by remember { mutableStateOf(false) }
+                    Text(
+                        text = "消息模板",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    OutlinedTextField(
+                        value = editChannelTemplate,
+                        onValueChange = { editChannelTemplate = it },
+                        label = { Text("自定义模板（留空使用默认格式）") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 5
+                    )
+                    // 预置模板快速选择
+                    ExposedDropdownMenuBox(
+                        expanded = templateExpanded,
+                        onExpandedChange = { templateExpanded = !templateExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = "选择预置模板",
+                            onValueChange = {},
+                            readOnly = true,
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(templateExpanded) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = templateExpanded,
+                            onDismissRequest = { templateExpanded = false }
+                        ) {
+                            MessageTemplateRenderer.getPresetTemplates().forEach { (name, tpl) ->
+                                DropdownMenuItem(
+                                    text = { Text(name) },
+                                    onClick = {
+                                        editChannelTemplate = tpl
+                                        templateExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = "可用占位符：{sender} 发送者 · {content} 内容 · {time} 时间 · {sim} 本机 · {code} 验证码 · {keyword} 关键词 · {channel} 通道",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6B7280)
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val ch = editingChannel ?: return@Button
-                        val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim(), ch.messageTemplate)
+                        val template = editChannelTemplate.trim().ifBlank { null }
+                        val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim(), template)
                         channels = channels.map { if (it.id == ch.id) updated else it }
                         saveChannels(prefs, channels)
                         LogStore.append(context, "编辑通道: ${updated.name}")
@@ -856,6 +944,20 @@ fun SmsForwarderApp(
             title = "编辑关键词配置",
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // 启用开关
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("启用规则", style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = editConfigEnabled,
+                            onCheckedChange = { editConfigEnabled = it }
+                        )
+                    }
+
+                    // 主关键词
                     OutlinedTextField(
                         value = editConfigKeyword,
                         onValueChange = { editConfigKeyword = it },
@@ -863,6 +965,124 @@ fun SmsForwarderApp(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    // 匹配模式
+                    var matchModeExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = matchModeExpanded,
+                        onExpandedChange = { matchModeExpanded = !matchModeExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = getMatchModeLabel(editConfigMatchMode),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("匹配模式") },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(matchModeExpanded) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = matchModeExpanded,
+                            onDismissRequest = { matchModeExpanded = false }
+                        ) {
+                            MatchMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(getMatchModeLabel(mode)) },
+                                    onClick = {
+                                        editConfigMatchMode = mode
+                                        matchModeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 多关键词组合逻辑
+                    var matchLogicExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = matchLogicExpanded,
+                        onExpandedChange = { matchLogicExpanded = !matchLogicExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = getMatchLogicLabel(editConfigMatchLogic),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("多关键词逻辑") },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(matchLogicExpanded) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = matchLogicExpanded,
+                            onDismissRequest = { matchLogicExpanded = false }
+                        ) {
+                            MatchLogic.entries.forEach { logic ->
+                                DropdownMenuItem(
+                                    text = { Text(getMatchLogicLabel(logic)) },
+                                    onClick = {
+                                        editConfigMatchLogic = logic
+                                        matchLogicExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 额外关键词
+                    OutlinedTextField(
+                        value = editConfigExtraKeywords,
+                        onValueChange = { editConfigExtraKeywords = it },
+                        label = { Text("额外关键词（每行一个）") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        maxLines = 4
+                    )
+                    Text(
+                        text = "多关键词逻辑为 AND 时需同时命中；为 OR 时任一命中即可",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6B7280)
+                    )
+
+                    // 发送者过滤
+                    OutlinedTextField(
+                        value = editConfigSenderPattern,
+                        onValueChange = { editConfigSenderPattern = it },
+                        label = { Text("发送者过滤（留空不过滤）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    var senderModeExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = senderModeExpanded,
+                        onExpandedChange = { senderModeExpanded = !senderModeExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = getSenderMatchModeLabel(editConfigSenderMatchMode),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("发送者匹配模式") },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(senderModeExpanded) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = senderModeExpanded,
+                            onDismissRequest = { senderModeExpanded = false }
+                        ) {
+                            SenderMatchMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(getSenderMatchModeLabel(mode)) },
+                                    onClick = {
+                                        editConfigSenderMatchMode = mode
+                                        senderModeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 转发通道
                     var editCfgExpanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
                         expanded = editCfgExpanded,
@@ -902,7 +1122,22 @@ fun SmsForwarderApp(
                             Toast.makeText(context, "请选择通道", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        val updated = KeywordConfig(cfg.id, editConfigKeyword.trim(), editConfigChannelId)
+                        val extraList = editConfigExtraKeywords
+                            .split("\n")
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                        val senderPattern = editConfigSenderPattern.trim().ifBlank { null }
+                        val updated = KeywordConfig(
+                            id = cfg.id,
+                            keyword = editConfigKeyword.trim(),
+                            channelId = editConfigChannelId,
+                            matchMode = editConfigMatchMode,
+                            matchLogic = editConfigMatchLogic,
+                            extraKeywords = extraList,
+                            senderPattern = senderPattern,
+                            senderMatchMode = editConfigSenderMatchMode,
+                            enabled = editConfigEnabled
+                        )
                         configs = configs.map { if (it.id == cfg.id) updated else it }
                         saveConfigs(prefs, configs)
                         LogStore.append(context, "编辑关键词: ${updated.keyword} -> ${channels.find { it.id == updated.channelId }?.name}")
@@ -3479,6 +3714,10 @@ fun SettingsTab(
     onLowBatteryThresholdChange: (Int) -> Unit,
     highBatteryThreshold: Int,
     onHighBatteryThresholdChange: (Int) -> Unit,
+    senderWhitelist: List<String>,
+    onSenderWhitelistChange: (List<String>) -> Unit,
+    senderBlacklist: List<String>,
+    onSenderBlacklistChange: (List<String>) -> Unit,
     onShowTestDialog: () -> Unit,
     onRevokePrivacyConsent: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
@@ -3879,6 +4118,117 @@ fun SettingsTab(
             }
         }
 
+        // 发送者过滤
+        item {
+            var showWhitelistDialog by remember { mutableStateOf(false) }
+            var showBlacklistDialog by remember { mutableStateOf(false) }
+
+            ModernCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "发送者过滤",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "全局过滤短信发送者号码，白名单优先级高于黑名单。支持通配符（* 代表任意字符，? 代表单个字符）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 白名单
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "白名单",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (senderWhitelist.isEmpty()) "未设置（全部放行）" else "${senderWhitelist.size} 条规则",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { showWhitelistDialog = true }) {
+                            Text("编辑")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 黑名单
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.Block,
+                            contentDescription = null,
+                            tint = Color(0xFFEE4444)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "黑名单",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (senderBlacklist.isEmpty()) "未设置" else "${senderBlacklist.size} 条规则",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { showBlacklistDialog = true }) {
+                            Text("编辑")
+                        }
+                    }
+                }
+            }
+
+            // 白名单编辑对话框
+            if (showWhitelistDialog) {
+                SenderFilterDialog(
+                    title = "发送者白名单",
+                    description = "只有匹配的发送者才会被转发。每行一个规则，支持通配符（如 106*、*银行*）",
+                    items = senderWhitelist,
+                    onDismiss = { showWhitelistDialog = false },
+                    onSave = { list ->
+                        onSenderWhitelistChange(list)
+                        showWhitelistDialog = false
+                    }
+                )
+            }
+
+            // 黑名单编辑对话框
+            if (showBlacklistDialog) {
+                SenderFilterDialog(
+                    title = "发送者黑名单",
+                    description = "匹配的发送者会被直接拦截，不会转发。每行一个规则，支持通配符（如 106*、*推销*）",
+                    items = senderBlacklist,
+                    onDismiss = { showBlacklistDialog = false },
+                    onSave = { list ->
+                        onSenderBlacklistChange(list)
+                        showBlacklistDialog = false
+                    }
+                )
+            }
+        }
+
         // 工具
         item {
             ModernCard(
@@ -4245,6 +4595,25 @@ fun PermissionManagementItem(
 
 fun getChannelTypeLabel(type: ChannelType): String = ConfigManager.getChannelTypeLabel(type)
 
+fun getMatchModeLabel(mode: MatchMode): String = when (mode) {
+    MatchMode.CONTAINS -> "包含匹配"
+    MatchMode.EXACT -> "精确匹配"
+    MatchMode.REGEX -> "正则表达式"
+    MatchMode.EXCLUDE -> "排除匹配"
+}
+
+fun getMatchLogicLabel(logic: MatchLogic): String = when (logic) {
+    MatchLogic.OR -> "OR（任一命中）"
+    MatchLogic.AND -> "AND（全部命中）"
+}
+
+fun getSenderMatchModeLabel(mode: SenderMatchMode): String = when (mode) {
+    SenderMatchMode.CONTAINS -> "包含匹配"
+    SenderMatchMode.EXACT -> "精确匹配"
+    SenderMatchMode.WILDCARD -> "通配符（* ?）"
+    SenderMatchMode.REGEX -> "正则表达式"
+}
+
 /**
  * 测试消息发送状态
  */
@@ -4255,6 +4624,62 @@ sealed class TestSendState {
     data class Error(val message: String) : TestSendState()
 }
 
+/**
+ * 发送者过滤编辑对话框
+ */
+@Composable
+fun SenderFilterDialog(
+    title: String,
+    description: String,
+    items: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit
+) {
+    var text by remember { mutableStateOf(items.joinToString("\n")) }
+
+    ModernAlertDialog(
+        onDismissRequest = onDismiss,
+        title = title,
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("规则列表（每行一个）") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    maxLines = 10
+                )
+                Text(
+                    text = "示例：\n106*  →  拦截所有 106 开头的号码\n*银行*  →  匹配包含\"银行\"的发送者",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6B7280),
+                    fontFamily = null
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val list = text.split("\n")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                    onSave(list)
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
 private fun loadChannels(prefs: android.content.SharedPreferences): List<Channel> = ChannelLoader.loadChannels(prefs)
 
 internal fun saveChannels(prefs: android.content.SharedPreferences, channels: List<Channel>) = ChannelLoader.saveChannels(prefs, channels)
@@ -4262,6 +4687,37 @@ internal fun saveChannels(prefs: android.content.SharedPreferences, channels: Li
 private fun loadConfigs(prefs: android.content.SharedPreferences): List<KeywordConfig> = ChannelLoader.loadConfigs(prefs)
 
 internal fun saveConfigs(prefs: android.content.SharedPreferences, configs: List<KeywordConfig>) = ChannelLoader.saveConfigs(prefs, configs)
+
+/**
+ * 从 SharedPreferences 加载发送者过滤列表（JSON 数组格式）
+ */
+private fun loadSenderFilterList(prefs: android.content.SharedPreferences, key: String): List<String> {
+    val jsonStr = prefs.getString(key, null) ?: return emptyList()
+    if (jsonStr.isBlank()) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(jsonStr)
+        val list = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            list.add(arr.getString(i))
+        }
+        list
+    } catch (e: Exception) {
+        emptyList()
+    }
+}
+
+/**
+ * 保存发送者过滤列表到 SharedPreferences（JSON 数组格式）
+ */
+private fun saveSenderFilterList(prefs: android.content.SharedPreferences, key: String, list: List<String>) {
+    if (list.isEmpty()) {
+        prefs.edit().remove(key).apply()
+    } else {
+        val arr = org.json.JSONArray()
+        list.forEach { arr.put(it) }
+        prefs.edit().putString(key, arr.toString()).apply()
+    }
+}
 
 private fun saveConfigToDownloads(
     context: Context,
