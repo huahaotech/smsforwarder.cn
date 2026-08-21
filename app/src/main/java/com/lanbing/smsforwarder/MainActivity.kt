@@ -868,17 +868,29 @@ fun SmsForwarderApp(
                         else -> {}
                     }
 
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     // 消息模板
                     var templateExpanded by remember { mutableStateOf(false) }
                     Text(
                         text = "消息模板",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "自定义转发消息的格式，留空使用默认格式",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = editChannelTemplate,
                         onValueChange = { editChannelTemplate = it },
-                        label = { Text("自定义模板（留空使用默认格式）") },
+                        label = { Text("消息模板") },
+                        placeholder = { Text("留空使用默认格式") },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
                         shape = RoundedCornerShape(12.dp),
                         maxLines = 5
@@ -886,17 +898,18 @@ fun SmsForwarderApp(
 
                     // 占位符快捷插入
                     Text(
-                        "点击插入占位符",
+                        "占位符（点击插入）",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Medium
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
-                            FilterChip(
-                                selected = false,
+                            AssistChip(
                                 onClick = {
                                     editChannelTemplate = editChannelTemplate + placeholder
                                 },
@@ -907,10 +920,20 @@ fun SmsForwarderApp(
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                     )
                                 },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(6.dp),
+                                border = AssistChipDefaults.assistChipBorder(
+                                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                )
                             )
                         }
                     }
+                    Text(
+                        text = MessageTemplateRenderer.getPlaceholderHints().joinToString("  ·  ") { "${it.first} ${it.second}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // 预置模板
                     ExposedDropdownMenuBox(
@@ -960,8 +983,7 @@ fun SmsForwarderApp(
                     CollapsibleSection(
                         title = "消息预览",
                         expanded = previewExpanded,
-                        onToggle = { previewExpanded = !previewExpanded },
-                        accent = true
+                        onToggle = { previewExpanded = !previewExpanded }
                     ) {
                         val previewText = remember(editChannelTemplate, editChannelName) {
                             val params = MessageTemplateRenderer.TemplateParams(
@@ -1276,8 +1298,7 @@ fun SmsForwarderApp(
                     CollapsibleSection(
                         title = "匹配测试",
                         expanded = testExpanded,
-                        onToggle = { testExpanded = !testExpanded },
-                        accent = true
+                        onToggle = { testExpanded = !testExpanded }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
@@ -2263,19 +2284,27 @@ fun ModernAlertDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(vertical = 16.dp),
             shape = RoundedCornerShape(20.dp),
             elevation = CardDefaults.cardElevation(8.dp)
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                Spacer(modifier = Modifier.height(20.dp))
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                // 内容区域：可滚动，占满剩余空间但不超过屏幕高度
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    content()
+                }
                 Spacer(modifier = Modifier.height(20.dp))
-                content()
-                Spacer(modifier = Modifier.height(24.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -2284,6 +2313,7 @@ fun ModernAlertDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     confirmButton()
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -4917,7 +4947,6 @@ fun SectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 12.dp)
     )
 }
