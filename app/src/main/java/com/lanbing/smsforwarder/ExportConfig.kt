@@ -22,6 +22,7 @@ data class ExportConfig(
     val showReceiverPhone: Boolean,
     val showSenderPhone: Boolean,
     val highlightVerificationCode: Boolean,
+    val globalMessageTemplate: String? = null,
     val batteryReminderEnabled: Boolean,
     val lowBatteryReminderEnabled: Boolean,
     val highBatteryReminderEnabled: Boolean,

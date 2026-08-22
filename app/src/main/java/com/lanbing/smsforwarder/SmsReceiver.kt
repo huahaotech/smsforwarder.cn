@@ -134,7 +134,8 @@ class SmsReceiver : BroadcastReceiver() {
                 fun fromChannel(
                     channel: Channel, sender: String, content: String, receiverPhoneNumber: String?,
                     showSenderPhone: Boolean, highlightVerificationCode: Boolean, timestamp: Long,
-                    errorMessage: String = "", matchedKeyword: String? = null
+                    errorMessage: String = "", matchedKeyword: String? = null,
+                    effectiveTemplate: String? = null
                 ): FailedMessage {
                     return FailedMessage(
                         channelId = channel.id,
@@ -149,7 +150,7 @@ class SmsReceiver : BroadcastReceiver() {
                         timestamp = timestamp,
                         retryCount = 0,
                         errorMessage = errorMessage,
-                        messageTemplate = channel.messageTemplate,
+                        messageTemplate = effectiveTemplate ?: channel.messageTemplate,
                         matchedKeyword = matchedKeyword
                     )
                 }
@@ -314,6 +315,9 @@ class SmsReceiver : BroadcastReceiver() {
         val showSenderPhone = prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)
         val highlightVerificationCode = prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)
 
+        // 全局默认消息模板（通道无自定义模板时使用）
+        val globalTemplate = prefs.getString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, null)
+
         // 使用 ChannelLoader 工具类加载配置（带内存缓存）
         val channels = ChannelLoader.loadChannels(prefs)
         val configs = ChannelLoader.loadConfigs(prefs)
@@ -418,6 +422,8 @@ class SmsReceiver : BroadcastReceiver() {
                                 LogStore.append(context, "通道 ${ch.name} webhook 格式无效")
                             } else {
                                 val matchedKw = MessageMatcher.getAllKeywords(cfg).firstOrNull() ?: cfg.keyword
+                                // 通道模板优先，为空时使用全局默认模板
+                                val effectiveTemplate = ch.messageTemplate.takeIf { !it.isNullOrBlank() } ?: globalTemplate
                                 val result = WebhookSender.sendSmsForward(
                                     webhookUrl = ch.target,
                                     sender = sender,
@@ -426,7 +432,7 @@ class SmsReceiver : BroadcastReceiver() {
                                     type = ch.type,
                                     showSenderPhone = showSenderPhone,
                                     highlightVerificationCode = highlightVerificationCode,
-                                    messageTemplate = ch.messageTemplate,
+                                    messageTemplate = effectiveTemplate,
                                     matchedKeyword = matchedKw,
                                     channelName = ch.name
                                 )
@@ -442,7 +448,8 @@ class SmsReceiver : BroadcastReceiver() {
                                                 FailedMessage.fromChannel(
                                                     ch, sender, fullMessage, receiverPhoneNumber,
                                                     showSenderPhone, highlightVerificationCode, now,
-                                                    result.errorMessage, matchedKw
+                                                    result.errorMessage, matchedKw,
+                                                    effectiveTemplate = effectiveTemplate
                                                 )
                                             )
                                         }

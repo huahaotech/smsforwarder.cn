@@ -43,9 +43,13 @@ object Constants {
     const val PREF_START_ON_BOOT = "start_on_boot"
     const val PREF_CHANNELS = "channels"
     const val PREF_KEYWORD_CONFIGS = "keyword_configs"
+    // 消息格式（已弃用，保留以兼容旧版本）
     const val PREF_SHOW_RECEIVER_PHONE = "show_receiver_phone"
     const val PREF_SHOW_SENDER_PHONE = "show_sender_phone"
     const val PREF_HIGHLIGHT_VERIFICATION_CODE = "highlight_verification_code"
+
+    // 全局默认消息模板（通道无自定义模板时使用）
+    const val PREF_GLOBAL_MESSAGE_TEMPLATE = "global_message_template"
     const val PREF_CUSTOM_SIM1_PHONE = "custom_sim1_phone"
     const val PREF_CUSTOM_SIM2_PHONE = "custom_sim2_phone"
     const val PREF_PRIVACY_AGREED = "privacy_agreed"

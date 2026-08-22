@@ -275,6 +275,12 @@ fun SmsForwarderApp(
     var showReceiverPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, true)) }
     var showSenderPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)) }
     var highlightVerificationCode by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)) }
+    var globalMessageTemplate by remember(configUpdateTrigger) {
+        mutableStateOf(
+            prefs.getString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, null)
+                ?: MessageTemplateRenderer.getPresetTemplate(MessageTemplateRenderer.PresetTemplate.VERIFICATION_CODE_FIRST)
+        )
+    }
     var batteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
     var lowBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, true)) }
     var highBatteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, true)) }
@@ -633,23 +639,11 @@ fun SmsForwarderApp(
                         }
                     )
                     3 -> SettingsTab(
-                        showReceiverPhone = showReceiverPhone,
-                        onShowReceiverPhoneChange = {
-                            showReceiverPhone = it
-                            prefs.edit().putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, showReceiverPhone).apply()
-                            if (showReceiverPhone) LogStore.append(context, "已开启显示本机号码") else LogStore.append(context, "已关闭显示本机号码")
-                        },
-                        showSenderPhone = showSenderPhone,
-                        onShowSenderPhoneChange = {
-                            showSenderPhone = it
-                            prefs.edit().putBoolean(Constants.PREF_SHOW_SENDER_PHONE, showSenderPhone).apply()
-                            if (showSenderPhone) LogStore.append(context, "已开启显示发送者号码") else LogStore.append(context, "已关闭显示发送者号码")
-                        },
-                        highlightVerificationCode = highlightVerificationCode,
-                        onHighlightVerificationCodeChange = {
-                            highlightVerificationCode = it
-                            prefs.edit().putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, highlightVerificationCode).apply()
-                            if (highlightVerificationCode) LogStore.append(context, "已开启突出显示验证码") else LogStore.append(context, "已关闭突出显示验证码")
+                        globalMessageTemplate = globalMessageTemplate,
+                        onGlobalMessageTemplateChange = {
+                            globalMessageTemplate = it
+                            prefs.edit().putString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, it).apply()
+                            LogStore.append(context, "全局消息模板已更新")
                         },
                         batteryReminderEnabled = batteryReminderEnabled,
                         onBatteryReminderEnabledChange = {
@@ -723,6 +717,7 @@ fun SmsForwarderApp(
                                 showReceiverPhone = showReceiverPhone,
                                 showSenderPhone = showSenderPhone,
                                 highlightVerificationCode = highlightVerificationCode,
+                                globalMessageTemplate = globalMessageTemplate,
                                 batteryReminderEnabled = batteryReminderEnabled,
                                 lowBatteryReminderEnabled = lowBatteryReminderEnabled,
                                 highBatteryReminderEnabled = highBatteryReminderEnabled,
@@ -885,7 +880,7 @@ fun SmsForwarderApp(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "自定义转发消息的格式，留空使用默认格式",
+                        text = "自定义转发消息的格式，留空使用全局默认模板",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -894,7 +889,7 @@ fun SmsForwarderApp(
                         value = editChannelTemplate,
                         onValueChange = { editChannelTemplate = it },
                         label = { Text("消息模板") },
-                        placeholder = { Text("留空使用默认格式") },
+                        placeholder = { Text("留空使用全局默认模板") },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
                         shape = RoundedCornerShape(12.dp),
                         maxLines = 5
@@ -1623,6 +1618,7 @@ fun SmsForwarderApp(
                                 showReceiverPhone = showReceiverPhone,
                                 showSenderPhone = showSenderPhone,
                                 highlightVerificationCode = highlightVerificationCode,
+                                globalMessageTemplate = globalMessageTemplate,
                                 batteryReminderEnabled = batteryReminderEnabled,
                                 lowBatteryReminderEnabled = lowBatteryReminderEnabled,
                                 highBatteryReminderEnabled = highBatteryReminderEnabled,
@@ -4145,12 +4141,8 @@ fun ChannelTab(
 
 @Composable
 fun SettingsTab(
-    showReceiverPhone: Boolean,
-    onShowReceiverPhoneChange: (Boolean) -> Unit,
-    showSenderPhone: Boolean,
-    onShowSenderPhoneChange: (Boolean) -> Unit,
-    highlightVerificationCode: Boolean,
-    onHighlightVerificationCodeChange: (Boolean) -> Unit,
+    globalMessageTemplate: String,
+    onGlobalMessageTemplateChange: (String) -> Unit,
     batteryReminderEnabled: Boolean,
     onBatteryReminderEnabledChange: (Boolean) -> Unit,
     lowBatteryReminderEnabled: Boolean,
@@ -4462,109 +4454,195 @@ fun SettingsTab(
             }
         }
 
-        // 消息格式配置
+        // 全局消息模板配置
         item {
+            var templateExpanded by remember { mutableStateOf(false) }
+            var previewExpanded by remember { mutableStateOf(true) }
+
             ModernCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        "消息格式",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF8B5CF6).copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.EditNote,
+                                contentDescription = null,
+                                tint = Color(0xFF8B5CF6)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "消息模板",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "全局默认转发格式，通道未自定义模板时使用",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 显示本机号码
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                    // 模板输入框 + 预置模板
+                    CollapsibleSection(
+                        title = "模板设置",
+                        expanded = templateExpanded,
+                        onToggle = { templateExpanded = !templateExpanded }
                     ) {
-                        Icon(
-                            Icons.Outlined.Phone,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = globalMessageTemplate,
+                                onValueChange = onGlobalMessageTemplateChange,
+                                label = { Text("消息模板") },
+                                placeholder = { Text("输入消息模板...") },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                maxLines = 6,
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    fontSize = MaterialTheme.typography.bodyMedium.fontSize
+                                )
+                            )
+
+                            // 预置模板下拉
+                            var presetExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = presetExpanded,
+                                onExpandedChange = { presetExpanded = !presetExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = "选择预置模板",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("快速选择") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = presetExpanded) },
+                                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = Color(0xFF8B5CF6)
+                                        )
+                                    }
+                                )
+                                DropdownMenu(
+                                    expanded = presetExpanded,
+                                    onDismissRequest = { presetExpanded = false },
+                                    modifier = Modifier.exposedDropdownSize(true)
+                                ) {
+                                    MessageTemplateRenderer.PresetTemplate.values().forEach { preset ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(preset.label, fontWeight = FontWeight.Medium)
+                                                    Text(
+                                                        text = MessageTemplateRenderer.getPresetTemplate(preset).take(40) + "…",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                onGlobalMessageTemplateChange(MessageTemplateRenderer.getPresetTemplate(preset))
+                                                presetExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 占位符快捷插入（一行一个，带说明）
                             Text(
-                                "显示本机号码",
-                                style = MaterialTheme.typography.bodyLarge,
+                                "占位符（点击插入）",
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
-                            Text(
-                                "转发时显示接收短信的本机号码",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
+                                    AssistChip(
+                                        onClick = {
+                                            onGlobalMessageTemplateChange(globalMessageTemplate + placeholder)
+                                        },
+                                        label = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = placeholder,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = desc,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
                         }
-                        Switch(
-                            checked = showReceiverPhone,
-                            onCheckedChange = onShowReceiverPhoneChange
-                        )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // 显示发送者号码
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                    // 实时预览
+                    CollapsibleSection(
+                        title = "消息预览",
+                        expanded = previewExpanded,
+                        onToggle = { previewExpanded = !previewExpanded }
                     ) {
-                        Icon(
-                            Icons.Outlined.Person,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column {
                             Text(
-                                "显示发送者号码",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "转发时显示短信发送者号码",
+                                "预览效果（模拟数据）",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                val previewParams = MessageTemplateRenderer.TemplateParams(
+                                    sender = "10086",
+                                    content = "【中国移动】您的验证码是 123456，5分钟内有效，请勿告知他人。",
+                                    receiverPhone = "138****8888",
+                                    verificationCode = "123456",
+                                    matchedKeyword = "验证码",
+                                    channelName = "默认通道"
+                                )
+                                Text(
+                                    text = MessageTemplateRenderer.render(globalMessageTemplate, previewParams),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
                         }
-                        Switch(
-                            checked = showSenderPhone,
-                            onCheckedChange = onShowSenderPhoneChange
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 突出显示验证码
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            Icons.Outlined.VpnKey,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "突出显示验证码",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "自动识别并突出显示短信验证码",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = highlightVerificationCode,
-                            onCheckedChange = onHighlightVerificationCodeChange
-                        )
                     }
                 }
             }

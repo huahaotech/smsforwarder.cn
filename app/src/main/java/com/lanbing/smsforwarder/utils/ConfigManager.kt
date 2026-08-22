@@ -78,6 +78,7 @@ object ConfigManager {
             put("showReceiverPhone", config.showReceiverPhone)
             put("showSenderPhone", config.showSenderPhone)
             put("highlightVerificationCode", config.highlightVerificationCode)
+            if (config.globalMessageTemplate != null) put("globalMessageTemplate", config.globalMessageTemplate)
             put("batteryReminderEnabled", config.batteryReminderEnabled)
             put("lowBatteryReminderEnabled", config.lowBatteryReminderEnabled)
             put("highBatteryReminderEnabled", config.highBatteryReminderEnabled)
@@ -217,6 +218,15 @@ object ConfigManager {
             editor.putBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, json.optBoolean("showReceiverPhone", true))
             editor.putBoolean(Constants.PREF_SHOW_SENDER_PHONE, json.optBoolean("showSenderPhone", true))
             editor.putBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, json.optBoolean("highlightVerificationCode", true))
+            // 全局消息模板（旧版本配置无此字段时保持默认值）
+            if (json.has("globalMessageTemplate")) {
+                val tpl = json.optString("globalMessageTemplate", null)
+                if (!tpl.isNullOrBlank()) {
+                    editor.putString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, tpl)
+                } else {
+                    editor.remove(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE)
+                }
+            }
             editor.putBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, json.optBoolean("batteryReminderEnabled", false))
             editor.putBoolean(Constants.PREF_LOW_BATTERY_REMINDER_ENABLED, json.optBoolean("lowBatteryReminderEnabled", true))
             editor.putBoolean(Constants.PREF_HIGH_BATTERY_REMINDER_ENABLED, json.optBoolean("highBatteryReminderEnabled", true))
