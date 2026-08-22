@@ -2451,13 +2451,14 @@ fun LogTab(
             modifier = Modifier.weight(1f)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
+                // 第一行：标题 + 操作按钮
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color(0xFFF59E0B).copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
@@ -2465,40 +2466,19 @@ fun LogTab(
                         Icon(
                             imageVector = Icons.Filled.History,
                             contentDescription = null,
-                            tint = Color(0xFFF59E0B)
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "转发日志",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "${logs.size} 条记录",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (autoRefresh) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    Icons.Outlined.Circle,
-                                    contentDescription = null,
-                                    tint = Color(0xFF22C55E),
-                                    modifier = Modifier.size(8.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    "实时刷新",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF22C55E)
-                                )
-                            }
-                        }
-                    }
-                    Row {
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        "转发日志",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // 操作按钮组
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (onAutoRefreshChange != null) {
                             IconButton(
                                 onClick = { onAutoRefreshChange(!autoRefresh) },
@@ -2507,7 +2487,7 @@ fun LogTab(
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         if (autoRefresh)
-                                            Color(0xFF22C55E).copy(alpha = 0.1f)
+                                            Color(0xFF22C55E).copy(alpha = 0.12f)
                                         else
                                             MaterialTheme.colorScheme.surfaceVariant
                                     )
@@ -2518,7 +2498,6 @@ fun LogTab(
                                     tint = if (autoRefresh) Color(0xFF22C55E) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
                         }
                         IconButton(
                             onClick = onRefresh,
@@ -2527,9 +2506,8 @@ fun LogTab(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                            Icon(Icons.Outlined.Refresh, contentDescription = "刷新")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                         IconButton(
                             onClick = onClear,
                             modifier = Modifier
@@ -2537,10 +2515,68 @@ fun LogTab(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color(0xFFEE4444).copy(alpha = 0.1f))
                         ) {
-                            Icon(Icons.Filled.ClearAll, contentDescription = "清除", tint = Color(0xFFEE4444))
+                            Icon(Icons.Outlined.DeleteSweep, contentDescription = "清除", tint = Color(0xFFEE4444))
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 第二行：记录数 + 状态标签
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "${logs.size} 条记录",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    if (autoRefresh) {
+                        Surface(
+                            color = Color(0xFF22C55E).copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(100.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Circle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF22C55E),
+                                    modifier = Modifier.size(6.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    "实时刷新中",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF22C55E),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(100.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    "已暂停刷新",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 if (logs.isEmpty()) {
                     Box(
