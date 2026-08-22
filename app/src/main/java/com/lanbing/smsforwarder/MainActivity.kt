@@ -920,10 +920,7 @@ fun SmsForwarderApp(
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                     )
                                 },
-                                shape = RoundedCornerShape(6.dp),
-                                border = AssistChipDefaults.assistChipBorder(
-                                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                )
+                                shape = RoundedCornerShape(6.dp)
                             )
                         }
                     }
