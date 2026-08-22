@@ -278,7 +278,8 @@ fun SmsForwarderApp(
     var globalMessageTemplate by remember(configUpdateTrigger) {
         mutableStateOf(
             prefs.getString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, null)
-                ?: MessageTemplateRenderer.getPresetTemplate(MessageTemplateRenderer.PresetTemplate.VERIFICATION_CODE_FIRST)
+                ?: MessageTemplateRenderer.getPresetTemplates().find { it.first == "验证码优先" }?.second
+                ?: "验证码: {code}\n{content}"
         )
     }
     var batteryReminderEnabled by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_BATTERY_REMINDER_ENABLED, false)) }
@@ -4581,13 +4582,13 @@ fun SettingsTab(
                                     onDismissRequest = { presetExpanded = false },
                                     modifier = Modifier.exposedDropdownSize(true)
                                 ) {
-                                    MessageTemplateRenderer.PresetTemplate.values().forEach { preset ->
+                                    MessageTemplateRenderer.getPresetTemplates().forEach { (label, template) ->
                                         DropdownMenuItem(
                                             text = {
                                                 Column {
-                                                    Text(preset.label, fontWeight = FontWeight.Medium)
+                                                    Text(label, fontWeight = FontWeight.Medium)
                                                     Text(
-                                                        text = MessageTemplateRenderer.getPresetTemplate(preset).take(40) + "…",
+                                                        text = template.take(40) + "…",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -4596,7 +4597,7 @@ fun SettingsTab(
                                                 }
                                             },
                                             onClick = {
-                                                onGlobalMessageTemplateChange(MessageTemplateRenderer.getPresetTemplate(preset))
+                                                onGlobalMessageTemplateChange(template)
                                                 presetExpanded = false
                                             }
                                         )
