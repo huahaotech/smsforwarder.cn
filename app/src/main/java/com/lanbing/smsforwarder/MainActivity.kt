@@ -896,39 +896,52 @@ fun SmsForwarderApp(
                         maxLines = 5
                     )
 
-                    // 占位符快捷插入
+                    // 占位符快捷插入（带说明，多行排列）
                     Text(
                         "占位符（点击插入）",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
-                            AssistChip(
-                                onClick = {
-                                    editChannelTemplate = editChannelTemplate + placeholder
-                                },
-                                label = {
-                                    Text(
-                                        text = placeholder,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MessageTemplateRenderer.getPlaceholderHints().chunked(2).forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                row.forEach { (placeholder, desc) ->
+                                    AssistChip(
+                                        onClick = {
+                                            editChannelTemplate = editChannelTemplate + placeholder
+                                        },
+                                        label = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = placeholder,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = desc,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f)
                                     )
-                                },
-                                shape = RoundedCornerShape(6.dp)
-                            )
+                                }
+                                // 补齐第二列空位
+                                if (row.size < 2) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
-                    Text(
-                        text = MessageTemplateRenderer.getPlaceholderHints().joinToString("  ·  ") { "${it.first} ${it.second}" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -5052,11 +5065,18 @@ fun SenderFilterDialog(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
-    var rules by remember { mutableStateOf(items.toMutableList()) }
+    val rules = remember { mutableStateListOf<String>().apply { addAll(items) } }
     var newRule by remember { mutableStateOf("") }
 
     // 快捷规则（常用预设）
     val quickRules = listOf("106*", "955*", "12306", "10086", "10000", "10010", "*银行*", "*快递*")
+
+    fun addRule(rule: String) {
+        val trimmed = rule.trim()
+        if (trimmed.isNotBlank() && trimmed !in rules) {
+            rules.add(trimmed)
+        }
+    }
 
     ModernAlertDialog(
         onDismissRequest = onDismiss,
@@ -5085,24 +5105,21 @@ fun SenderFilterDialog(
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
                             onDone = {
-                                val rule = newRule.trim()
-                                if (rule.isNotBlank() && rule !in rules) {
-                                    rules.add(rule)
-                                    newRule = ""
-                                }
+                                addRule(newRule)
+                                newRule = ""
                             }
                         )
                     )
-                    IconButton(
+                    Button(
                         onClick = {
-                            val rule = newRule.trim()
-                            if (rule.isNotBlank() && rule !in rules) {
-                                rules.add(rule)
-                                newRule = ""
-                            }
-                        }
+                            addRule(newRule)
+                            newRule = ""
+                        },
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Outlined.Add, contentDescription = "添加")
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("添加")
                     }
                 }
 
@@ -5110,7 +5127,7 @@ fun SenderFilterDialog(
                 Text(
                     "快捷添加",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.Medium
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -5123,10 +5140,16 @@ fun SenderFilterDialog(
                                 if (isAdded) {
                                     rules.remove(rule)
                                 } else {
-                                    rules.add(rule)
+                                    addRule(rule)
                                 }
                             },
-                            label = { Text(rule, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) },
+                            label = {
+                                Text(
+                                    rule,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            },
                             leadingIcon = if (isAdded) {
                                 { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                             } else null,
@@ -5135,7 +5158,7 @@ fun SenderFilterDialog(
                     }
                 }
 
-                // 已添加的规则列表（Chip 形式）
+                // 已添加的规则列表（纵向列表，每行一条完整显示）
                 Text(
                     "已添加规则（${rules.size} 条）",
                     style = MaterialTheme.typography.bodySmall,
@@ -5156,49 +5179,50 @@ fun SenderFilterDialog(
                         )
                     }
                 } else {
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 180.dp)
-                            .verticalScroll(rememberScrollState())
+                            .heightIn(max = 200.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            // 按 4 个一行分组，withIndex 保留原始索引
-                            val rows = rules.withIndex().chunked(4)
-                            rows.forEach { rowItems ->
+                        Column(
+                            modifier = Modifier.verticalScroll(rememberScrollState())
+                        ) {
+                            rules.forEachIndexed { index, rule ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { rules.removeAt(index) }
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    rowItems.forEach { (idx, rule) ->
-                                        AssistChip(
-                                            onClick = { rules.removeAt(idx) },
-                                            label = {
-                                                Text(
-                                                    text = rule,
-                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    maxLines = 1,
-                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                                )
-                                            },
-                                            trailingIcon = {
-                                                Icon(
-                                                    Icons.Outlined.Close,
-                                                    contentDescription = "删除",
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            },
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    // 补齐空位
-                                    repeat(4 - rowItems.size) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
+                                    Icon(
+                                        Icons.Outlined.Label,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = rule,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "删除",
+                                        tint = Color(0xFFEE4444),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
+                                if (index < rules.size - 1) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 44.dp),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    )
+                                }
                             }
                         }
                     }
