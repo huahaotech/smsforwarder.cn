@@ -52,6 +52,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -326,6 +327,7 @@ fun SmsForwarderApp(
 
     // UI state
     var logs by remember { mutableStateOf(LogStore.readAll(context)) }
+    var logAutoRefresh by remember { mutableStateOf(true) }
     var currentTab by remember { mutableStateOf<Int>(0) }
     var showTestDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
@@ -755,12 +757,14 @@ fun SmsForwarderApp(
                     )
                     4 -> LogTab(
                         logs = logs,
+                        autoRefresh = logAutoRefresh,
                         onRefresh = { logs = LogStore.readAll(context) },
                         onClear = {
                             LogStore.clear(context)
                             logs = emptyList()
                             Toast.makeText(context, "日志已清除", Toast.LENGTH_SHORT).show()
-                        }
+                        },
+                        onAutoRefreshChange = { logAutoRefresh = it }
                     )
                 }
             }
@@ -896,7 +900,7 @@ fun SmsForwarderApp(
                         maxLines = 5
                     )
 
-                    // 占位符快捷插入（带说明，多行排列）
+                    // 占位符快捷插入（一行一个，带说明）
                     Text(
                         "占位符（点击插入）",
                         style = MaterialTheme.typography.bodySmall,
@@ -904,42 +908,33 @@ fun SmsForwarderApp(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        MessageTemplateRenderer.getPlaceholderHints().chunked(2).forEach { row ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                row.forEach { (placeholder, desc) ->
-                                    AssistChip(
-                                        onClick = {
-                                            editChannelTemplate = editChannelTemplate + placeholder
-                                        },
-                                        label = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = placeholder,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = desc,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                // 补齐第二列空位
-                                if (row.size < 2) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
+                        MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
+                            AssistChip(
+                                onClick = {
+                                    editChannelTemplate = editChannelTemplate + placeholder
+                                },
+                                label = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = placeholder,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = desc,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
 
@@ -1224,16 +1219,113 @@ fun SmsForwarderApp(
                                 }
                             }
 
-                            // 额外关键词
-                            OutlinedTextField(
-                                value = editConfigExtraKeywords,
-                                onValueChange = { editConfigExtraKeywords = it },
-                                label = { Text("额外关键词") },
-                                placeholder = { Text("每行一个关键词") },
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                maxLines = 4
+                            // 额外关键词（逐个添加 + Chip 列表）
+                            val extraKws = remember {
+                                androidx.compose.runtime.mutableStateListOf<String>().apply {
+                                    addAll(editConfigExtraKeywords.lines().map { it.trim() }.filter { it.isNotBlank() })
+                                }
+                            }
+                            var newKw by remember { mutableStateOf("") }
+                            Text(
+                                "额外关键词（${extraKws.size} 个）",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
                             )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = newKw,
+                                    onValueChange = { newKw = it },
+                                    label = { Text("添加关键词") },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    singleLine = true,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                        onDone = {
+                                            val kw = newKw.trim()
+                                            if (kw.isNotBlank() && kw !in extraKws) {
+                                                extraKws.add(kw)
+                                                newKw = ""
+                                            }
+                                        }
+                                    )
+                                )
+                                Button(
+                                    onClick = {
+                                        val kw = newKw.trim()
+                                        if (kw.isNotBlank() && kw !in extraKws) {
+                                            extraKws.add(kw)
+                                            newKw = ""
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("添加")
+                                }
+                            }
+                            // 已添加列表（Chip 横向滚动）
+                            if (extraKws.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 40.dp, max = 120.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Column {
+                                        extraKws.chunked(3).forEach { row ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                row.forEachIndexed { idx, kw ->
+                                                    val globalIdx = extraKws.indexOf(kw)
+                                                    AssistChip(
+                                                        onClick = { if (globalIdx >= 0) extraKws.removeAt(globalIdx) },
+                                                        label = {
+                                                            Text(
+                                                                text = kw,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
+                                                        },
+                                                        trailingIcon = {
+                                                            Icon(
+                                                                Icons.Outlined.Close,
+                                                                contentDescription = "删除",
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        },
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                }
+                                                repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                        }
+                                    }
+                                }
+                            } else {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "仅使用主关键词",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(12.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
                             Text(
                                 text = when (editConfigMatchLogic) {
                                     MatchLogic.OR -> "OR 模式：主关键词或额外关键词任一命中即匹配"
@@ -1242,6 +1334,10 @@ fun SmsForwarderApp(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            // 同步 extraKws 到 editConfigExtraKeywords（每次重组后同步）
+                            androidx.compose.runtime.SideEffect {
+                                editConfigExtraKeywords = extraKws.joinToString("\n")
+                            }
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
 
@@ -2334,9 +2430,22 @@ fun ModernAlertDialog(
 @Composable
 fun LogTab(
     logs: List<String>,
+    autoRefresh: Boolean = true,
+    refreshIntervalMs: Long = 2000,
     onRefresh: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onAutoRefreshChange: ((Boolean) -> Unit)? = null
 ) {
+    // 自动刷新：当组件处于组合中时，按间隔调用 onRefresh
+    if (autoRefresh) {
+        androidx.compose.runtime.LaunchedEffect(refreshIntervalMs) {
+            while (true) {
+                onRefresh()
+                delay(refreshIntervalMs)
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2370,13 +2479,51 @@ fun LogTab(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            "${logs.size} 条记录",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${logs.size} 条记录",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (autoRefresh) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    Icons.Outlined.Circle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF22C55E),
+                                    modifier = Modifier.size(8.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "实时刷新",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF22C55E)
+                                )
+                            }
+                        }
                     }
                     Row {
+                        if (onAutoRefreshChange != null) {
+                            IconButton(
+                                onClick = { onAutoRefreshChange(!autoRefresh) },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (autoRefresh)
+                                            Color(0xFF22C55E).copy(alpha = 0.1f)
+                                        else
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                            ) {
+                                Icon(
+                                    Icons.Outlined.AutoAwesome,
+                                    contentDescription = "自动刷新",
+                                    tint = if (autoRefresh) Color(0xFF22C55E) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         IconButton(
                             onClick = onRefresh,
                             modifier = Modifier
