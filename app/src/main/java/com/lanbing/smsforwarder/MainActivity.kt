@@ -62,6 +62,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -319,7 +321,7 @@ fun SmsForwarderApp(
     var editChannelName by remember { mutableStateOf("") }
     var editChannelTarget by remember { mutableStateOf("") }
     var editChannelType by remember { mutableStateOf(ChannelType.WECHAT) }
-    var editChannelTemplate by remember { mutableStateOf("") }
+    var editChannelTemplate by remember { mutableStateOf(TextFieldValue("")) }
 
     var editingConfig by remember { mutableStateOf<KeywordConfig?>(null) }
     var showConfigDialog by remember { mutableStateOf(false) }
@@ -635,16 +637,17 @@ fun SmsForwarderApp(
                             editChannelName = ch.name
                             editChannelTarget = ch.target
                             editChannelType = ch.type
-                            editChannelTemplate = ch.messageTemplate ?: ""
+                            editChannelTemplate = TextFieldValue(ch.messageTemplate ?: "")
                             showChannelDialog = true
                         }
                     )
                     3 -> SettingsTab(
                         globalMessageTemplate = globalMessageTemplate,
-                        onGlobalMessageTemplateChange = {
-                            globalMessageTemplate = it
-                            prefs.edit().putString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, it).apply()
+                        onSaveGlobalTemplate = { newTemplate ->
+                            globalMessageTemplate = newTemplate
+                            prefs.edit().putString(Constants.PREF_GLOBAL_MESSAGE_TEMPLATE, newTemplate).apply()
                             LogStore.append(context, "全局消息模板已更新")
+                            Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                         },
                         batteryReminderEnabled = batteryReminderEnabled,
                         onBatteryReminderEnabledChange = {
@@ -898,7 +901,7 @@ fun SmsForwarderApp(
 
                     // 占位符快捷插入（一行一个，带说明）
                     Text(
-                        "占位符（点击插入）",
+                        "占位符（点击插入到光标处）",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
                     )
@@ -907,7 +910,14 @@ fun SmsForwarderApp(
                         MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
                             AssistChip(
                                 onClick = {
-                                    editChannelTemplate = editChannelTemplate + placeholder
+                                    val text = editChannelTemplate.text
+                                    val sel = editChannelTemplate.selection.start
+                                    val newText = text.substring(0, sel) + placeholder + text.substring(sel)
+                                    val newSel = sel + placeholder.length
+                                    editChannelTemplate = editChannelTemplate.copy(
+                                        text = newText,
+                                        selection = TextRange(newSel, newSel)
+                                    )
                                 },
                                 label = {
                                     Row(
@@ -971,7 +981,7 @@ fun SmsForwarderApp(
                                         }
                                     },
                                     onClick = {
-                                        editChannelTemplate = tpl
+                                        editChannelTemplate = TextFieldValue(tpl, TextRange(tpl.length))
                                         templateExpanded = false
                                     }
                                 )
@@ -995,14 +1005,14 @@ fun SmsForwarderApp(
                                 matchedKeyword = "流量",
                                 channelName = editChannelName.ifBlank { "我的通道" }
                             )
-                            if (editChannelTemplate.isBlank()) {
+                            if (editChannelTemplate.text.isBlank()) {
                                 "(使用默认格式)\n\n" + MessageTemplateRenderer.buildDefaultMessage(
                                     params,
                                     showSenderPhone = true,
                                     highlightVerificationCode = true
                                 )
                             } else {
-                                MessageTemplateRenderer.render(editChannelTemplate, params)
+                                MessageTemplateRenderer.render(editChannelTemplate.text, params)
                             }
                         }
                         Surface(
@@ -1024,7 +1034,7 @@ fun SmsForwarderApp(
                 Button(
                     onClick = {
                         val ch = editingChannel ?: return@Button
-                        val template = editChannelTemplate.trim().ifBlank { null }
+                        val template = editChannelTemplate.text.trim().ifBlank { null }
                         val updated = Channel(ch.id, editChannelName.trim(), editChannelType, editChannelTarget.trim(), template)
                         channels = channels.map { if (it.id == ch.id) updated else it }
                         saveChannels(prefs, channels)
@@ -4179,7 +4189,7 @@ fun ChannelTab(
 @Composable
 fun SettingsTab(
     globalMessageTemplate: String,
-    onGlobalMessageTemplateChange: (String) -> Unit,
+    onSaveGlobalTemplate: (String) -> Unit,
     batteryReminderEnabled: Boolean,
     onBatteryReminderEnabledChange: (Boolean) -> Unit,
     lowBatteryReminderEnabled: Boolean,
@@ -4534,7 +4544,12 @@ fun SettingsTab(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 模板输入框 + 预置模板
+                    // 模板输入框 + 预置模板 + 保存按钮
+                    var editTemplate by remember(globalMessageTemplate) {
+                        mutableStateOf(TextFieldValue(globalMessageTemplate, TextRange(globalMessageTemplate.length)))
+                    }
+                    var isDirty by remember(globalMessageTemplate) { mutableStateOf(false) }
+
                     CollapsibleSection(
                         title = "模板设置",
                         expanded = templateExpanded,
@@ -4542,8 +4557,11 @@ fun SettingsTab(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedTextField(
-                                value = globalMessageTemplate,
-                                onValueChange = onGlobalMessageTemplateChange,
+                                value = editTemplate,
+                                onValueChange = {
+                                    editTemplate = it
+                                    isDirty = true
+                                },
                                 label = { Text("消息模板") },
                                 placeholder = { Text("输入消息模板...") },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
@@ -4554,6 +4572,60 @@ fun SettingsTab(
                                     fontSize = MaterialTheme.typography.bodyMedium.fontSize
                                 )
                             )
+
+                            // 未保存提示
+                            if (isDirty) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Info,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "修改尚未保存",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFF59E0B)
+                                    )
+                                }
+                            }
+
+                            // 保存按钮
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        onSaveGlobalTemplate(editTemplate.text)
+                                        isDirty = false
+                                    },
+                                    enabled = isDirty,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                                ) {
+                                    Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("保存模板", fontWeight = FontWeight.SemiBold)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        editTemplate = TextFieldValue(globalMessageTemplate, TextRange(globalMessageTemplate.length))
+                                        isDirty = false
+                                    },
+                                    enabled = isDirty,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.height(48.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                                ) {
+                                    Text("重置")
+                                }
+                            }
 
                             // 预置模板下拉
                             var presetExpanded by remember { mutableStateOf(false) }
@@ -4597,7 +4669,8 @@ fun SettingsTab(
                                                 }
                                             },
                                             onClick = {
-                                                onGlobalMessageTemplateChange(template)
+                                                editTemplate = TextFieldValue(template, TextRange(template.length))
+                                                isDirty = true
                                                 presetExpanded = false
                                             }
                                         )
@@ -4607,7 +4680,7 @@ fun SettingsTab(
 
                             // 占位符快捷插入（一行一个，带说明）
                             Text(
-                                "占位符（点击插入）",
+                                "占位符（点击插入到光标处）",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
@@ -4615,7 +4688,15 @@ fun SettingsTab(
                                 MessageTemplateRenderer.getPlaceholderHints().forEach { (placeholder, desc) ->
                                     AssistChip(
                                         onClick = {
-                                            onGlobalMessageTemplateChange(globalMessageTemplate + placeholder)
+                                            val text = editTemplate.text
+                                            val sel = editTemplate.selection.start
+                                            val newText = text.substring(0, sel) + placeholder + text.substring(sel)
+                                            val newSel = sel + placeholder.length
+                                            editTemplate = editTemplate.copy(
+                                                text = newText,
+                                                selection = TextRange(newSel, newSel)
+                                            )
+                                            isDirty = true
                                         },
                                         label = {
                                             Row(
@@ -4673,7 +4754,7 @@ fun SettingsTab(
                                     channelName = "默认通道"
                                 )
                                 Text(
-                                    text = MessageTemplateRenderer.render(globalMessageTemplate, previewParams),
+                                    text = MessageTemplateRenderer.render(editTemplate.text, previewParams),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                     modifier = Modifier.padding(12.dp)

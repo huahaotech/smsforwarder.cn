@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.9.2-blue.svg)
+![Version](https://img.shields.io/badge/version-2.9.3-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -56,6 +56,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.9.3** | 全局消息模板改为手动保存（保存按钮 + 重置按钮）；占位符点击插入到光标位置而非末尾；日志页头部布局优化，增加实时刷新状态标签；修复多项 UI 交互问题。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.2** | 新增正则表达式关键词匹配、发送者黑白名单过滤、多关键词 AND/OR 组合、自定义消息模板、通道测试按钮；全局消息模板编辑器替代原三开关；日志实时自动刷新；全面优化交互体验；多项性能和代码质量优化。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.0** | 大幅精简APK体积（7MB→2MB+）；修复电量/充电提醒无法触发的问题；代码架构重构，抽取多个工具类提升可维护性。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.8.2** | 增加充电提醒功能；增加防诈骗提示；重构配置导入导出功能（移除二维码方案，改用文件+文本方式）；优化电量提醒逻辑。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
