@@ -274,6 +274,14 @@ fun SmsForwarderApp(
     var senderBlacklist by remember(configUpdateTrigger) {
         mutableStateOf(loadSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST))
     }
+
+    // 内容黑白名单
+    var contentWhitelist by remember(configUpdateTrigger) {
+        mutableStateOf(loadSenderFilterList(prefs, Constants.PREF_CONTENT_WHITELIST))
+    }
+    var contentBlacklist by remember(configUpdateTrigger) {
+        mutableStateOf(loadSenderFilterList(prefs, Constants.PREF_CONTENT_BLACKLIST))
+    }
     var showReceiverPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_RECEIVER_PHONE, true)) }
     var showSenderPhone by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_SHOW_SENDER_PHONE, true)) }
     var highlightVerificationCode by remember(configUpdateTrigger) { mutableStateOf(prefs.getBoolean(Constants.PREF_HIGHLIGHT_VERIFICATION_CODE, true)) }
@@ -731,7 +739,11 @@ fun SmsForwarderApp(
                                 highBatteryThreshold = highBatteryThreshold,
                                 customSim1Phone = customSim1Phone,
                                 customSim2Phone = customSim2Phone,
-                                startOnBoot = startOnBoot
+                                startOnBoot = startOnBoot,
+                                senderWhitelist = senderWhitelist,
+                                senderBlacklist = senderBlacklist,
+                                contentWhitelist = contentWhitelist,
+                                contentBlacklist = contentBlacklist
                             )
                             val jsonStr = ConfigManager.generateConfigJson(exportCfg)
                             exportJsonStr = jsonStr
@@ -751,6 +763,18 @@ fun SmsForwarderApp(
                             senderBlacklist = list
                             saveSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST, list)
                             LogStore.append(context, "发送者黑名单已更新，共 ${list.size} 条规则")
+                        },
+                        contentWhitelist = contentWhitelist,
+                        onContentWhitelistChange = { list ->
+                            contentWhitelist = list
+                            saveSenderFilterList(prefs, Constants.PREF_CONTENT_WHITELIST, list)
+                            LogStore.append(context, "内容白名单已更新，共 ${list.size} 条规则")
+                        },
+                        contentBlacklist = contentBlacklist,
+                        onContentBlacklistChange = { list ->
+                            contentBlacklist = list
+                            saveSenderFilterList(prefs, Constants.PREF_CONTENT_BLACKLIST, list)
+                            LogStore.append(context, "内容黑名单已更新，共 ${list.size} 条规则")
                         },
                         onStartService = onStartService
                     )
@@ -1639,7 +1663,11 @@ fun SmsForwarderApp(
                                 highBatteryThreshold = highBatteryThreshold,
                                 customSim1Phone = customSim1Phone,
                                 customSim2Phone = customSim2Phone,
-                                startOnBoot = startOnBoot
+                                startOnBoot = startOnBoot,
+                                senderWhitelist = senderWhitelist,
+                                senderBlacklist = senderBlacklist,
+                                contentWhitelist = contentWhitelist,
+                                contentBlacklist = contentBlacklist
                             )
                             ConfigManager.exportConfig(context, exportCfg)
                             showExportDialog = false
@@ -4209,6 +4237,10 @@ fun SettingsTab(
     onSenderWhitelistChange: (List<String>) -> Unit,
     senderBlacklist: List<String>,
     onSenderBlacklistChange: (List<String>) -> Unit,
+    contentWhitelist: List<String>,
+    onContentWhitelistChange: (List<String>) -> Unit,
+    contentBlacklist: List<String>,
+    onContentBlacklistChange: (List<String>) -> Unit,
     onShowTestDialog: () -> Unit,
     onRevokePrivacyConsent: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
@@ -4852,7 +4884,7 @@ fun SettingsTab(
             if (showWhitelistDialog) {
                 SenderFilterDialog(
                     title = "发送者白名单",
-                    description = "只有匹配的发送者才会被转发。每行一个规则，支持通配符（如 106*、*银行*）",
+                    description = "只有匹配的发送者号码才会被转发。每行一个规则，支持通配符（如 106*、138*）",
                     items = senderWhitelist,
                     onDismiss = { showWhitelistDialog = false },
                     onSave = { list ->
@@ -4866,12 +4898,123 @@ fun SettingsTab(
             if (showBlacklistDialog) {
                 SenderFilterDialog(
                     title = "发送者黑名单",
-                    description = "匹配的发送者会被直接拦截，不会转发。每行一个规则，支持通配符（如 106*、*推销*）",
+                    description = "匹配的发送者号码会被直接拦截，不会转发。每行一个规则，支持通配符（如 106*、400*）",
                     items = senderBlacklist,
                     onDismiss = { showBlacklistDialog = false },
                     onSave = { list ->
                         onSenderBlacklistChange(list)
                         showBlacklistDialog = false
+                    }
+                )
+            }
+        }
+
+        // 内容过滤
+        item {
+            var showContentWhitelistDialog by remember { mutableStateOf(false) }
+            var showContentBlacklistDialog by remember { mutableStateOf(false) }
+
+            ModernCard(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "内容过滤",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "全局过滤短信内容，白名单优先级高于黑名单。支持通配符（* 代表任意字符，? 代表单个字符）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 白名单
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "白名单",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (contentWhitelist.isEmpty()) "未设置（全部放行）" else "${contentWhitelist.size} 条规则",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { showContentWhitelistDialog = true }) {
+                            Text("编辑")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 黑名单
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.Block,
+                            contentDescription = null,
+                            tint = Color(0xFFEE4444)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "黑名单",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (contentBlacklist.isEmpty()) "未设置" else "${contentBlacklist.size} 条规则",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { showContentBlacklistDialog = true }) {
+                            Text("编辑")
+                        }
+                    }
+                }
+            }
+
+            // 内容白名单编辑对话框
+            if (showContentWhitelistDialog) {
+                SenderFilterDialog(
+                    title = "内容白名单",
+                    description = "只有内容匹配的短信才会被转发。每行一个规则，支持通配符（如 *验证码*、*银行*）",
+                    items = contentWhitelist,
+                    onDismiss = { showContentWhitelistDialog = false },
+                    onSave = { list ->
+                        onContentWhitelistChange(list)
+                        showContentWhitelistDialog = false
+                    }
+                )
+            }
+
+            // 内容黑名单编辑对话框
+            if (showContentBlacklistDialog) {
+                SenderFilterDialog(
+                    title = "内容黑名单",
+                    description = "内容匹配的短信会被直接拦截，不会转发。每行一个规则，支持通配符（如 *推销*、*贷款*）",
+                    items = contentBlacklist,
+                    onDismiss = { showContentBlacklistDialog = false },
+                    onSave = { list ->
+                        onContentBlacklistChange(list)
+                        showContentBlacklistDialog = false
                     }
                 )
             }

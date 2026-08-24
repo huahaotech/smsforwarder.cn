@@ -59,12 +59,15 @@ object MessageMatcher {
         val pattern = config.senderPattern
         if (pattern.isNullOrBlank()) return true // 未设置发送者过滤，直接通过
 
+        // 归一化发送者号码（去除国家代码前缀、格式字符等），提高匹配成功率
+        val normalizedSender = normalizePhoneNumber(sender)
+
         return try {
             when (config.senderMatchMode) {
-                SenderMatchMode.CONTAINS -> sender.contains(pattern, ignoreCase = true)
-                SenderMatchMode.EXACT -> sender.equals(pattern, ignoreCase = true)
-                SenderMatchMode.WILDCARD -> matchWildcard(pattern, sender)
-                SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(sender)
+                SenderMatchMode.CONTAINS -> normalizedSender.contains(pattern, ignoreCase = true)
+                SenderMatchMode.EXACT -> normalizedSender.equals(pattern, ignoreCase = true)
+                SenderMatchMode.WILDCARD -> matchWildcard(pattern, normalizedSender)
+                SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(normalizedSender)
             }
         } catch (e: Exception) {
             Log.e(TAG, "发送者匹配失败，模式=${config.senderMatchMode}，pattern=$pattern", e)
@@ -118,6 +121,38 @@ object MessageMatcher {
         }
     }
 
+    // ==================== 号码归一化 ====================
+
+    /**
+     * 归一化电话号码，用于匹配前的统一处理
+     *
+     * 处理内容：
+     * 1. 去除所有空格、横杠、括号等格式字符（保留数字和 +）
+     * 2. 去除中国国家代码前缀 +86 / 0086
+     * 3. 去除开头的 +（未知国家代码的情况也尽量兼容）
+     *
+     * 这样用户设置黑名单/白名单时不需要考虑国家代码前缀，
+     * 直接写 139*、106* 等即可匹配带 +86 前缀的号码。
+     */
+    fun normalizePhoneNumber(phone: String): String {
+        // 先去除空格、横杠、括号等常见格式字符，保留数字和 +
+        var normalized = phone.replace(Regex("[\\s\\-()\\[\\]{}]"), "")
+
+        // 去除中国国家代码前缀 +86 或 0086
+        if (normalized.startsWith("+86")) {
+            normalized = normalized.removePrefix("+86")
+        } else if (normalized.startsWith("0086")) {
+            normalized = normalized.removePrefix("0086")
+        }
+
+        // 如果还有其他 + 开头（未知国家代码），也去掉 + 尽量兼容
+        if (normalized.startsWith("+")) {
+            normalized = normalized.removePrefix("+")
+        }
+
+        return normalized
+    }
+
     // ==================== 通配符匹配 ====================
 
     /**
@@ -167,15 +202,18 @@ object MessageMatcher {
         whitelistMode: SenderMatchMode = SenderMatchMode.WILDCARD,
         blacklistMode: SenderMatchMode = SenderMatchMode.WILDCARD
     ): Boolean {
+        // 归一化发送者号码（去除国家代码前缀、格式字符等），提高匹配成功率
+        val normalizedSender = normalizePhoneNumber(sender)
+
         // 白名单优先：启用了白名单，只有命中白名单的才通过
         if (!whitelist.isNullOrEmpty()) {
             val inWhitelist = whitelist.any { pattern ->
                 try {
                     when (whitelistMode) {
-                        SenderMatchMode.CONTAINS -> sender.contains(pattern, ignoreCase = true)
-                        SenderMatchMode.EXACT -> sender.equals(pattern, ignoreCase = true)
-                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, sender)
-                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(sender)
+                        SenderMatchMode.CONTAINS -> normalizedSender.contains(pattern, ignoreCase = true)
+                        SenderMatchMode.EXACT -> normalizedSender.equals(pattern, ignoreCase = true)
+                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, normalizedSender)
+                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(normalizedSender)
                     }
                 } catch (e: Exception) {
                     false
@@ -189,10 +227,66 @@ object MessageMatcher {
             val inBlacklist = blacklist.any { pattern ->
                 try {
                     when (blacklistMode) {
-                        SenderMatchMode.CONTAINS -> sender.contains(pattern, ignoreCase = true)
-                        SenderMatchMode.EXACT -> sender.equals(pattern, ignoreCase = true)
-                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, sender)
-                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(sender)
+                        SenderMatchMode.CONTAINS -> normalizedSender.contains(pattern, ignoreCase = true)
+                        SenderMatchMode.EXACT -> normalizedSender.equals(pattern, ignoreCase = true)
+                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, normalizedSender)
+                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(normalizedSender)
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (inBlacklist) return false
+        }
+
+        return true
+    }
+
+    // ==================== 全局内容过滤 ====================
+
+    /**
+     * 全局内容白名单/黑名单过滤
+     *
+     * @param content 短信内容
+     * @param whitelist 内容白名单模式列表（null/空表示不启用白名单）
+     * @param blacklist 内容黑名单模式列表（null/空表示不启用黑名单）
+     * @param whitelistMode 白名单匹配模式（默认通配符）
+     * @param blacklistMode 黑名单匹配模式（默认通配符）
+     * @return true 表示通过过滤（应该继续处理），false 表示被过滤掉
+     */
+    fun passesGlobalContentFilter(
+        content: String,
+        whitelist: List<String>?,
+        blacklist: List<String>?,
+        whitelistMode: SenderMatchMode = SenderMatchMode.WILDCARD,
+        blacklistMode: SenderMatchMode = SenderMatchMode.WILDCARD
+    ): Boolean {
+        // 内容白名单优先：启用了白名单，只有命中白名单的才通过
+        if (!whitelist.isNullOrEmpty()) {
+            val inWhitelist = whitelist.any { pattern ->
+                try {
+                    when (whitelistMode) {
+                        SenderMatchMode.CONTAINS -> content.contains(pattern, ignoreCase = true)
+                        SenderMatchMode.EXACT -> content.equals(pattern, ignoreCase = true)
+                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, content)
+                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(content)
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            if (!inWhitelist) return false
+        }
+
+        // 内容黑名单：命中黑名单则不通过
+        if (!blacklist.isNullOrEmpty()) {
+            val inBlacklist = blacklist.any { pattern ->
+                try {
+                    when (blacklistMode) {
+                        SenderMatchMode.CONTAINS -> content.contains(pattern, ignoreCase = true)
+                        SenderMatchMode.EXACT -> content.equals(pattern, ignoreCase = true)
+                        SenderMatchMode.WILDCARD -> matchWildcard(pattern, content)
+                        SenderMatchMode.REGEX -> getOrCompileRegex(pattern).containsMatchIn(content)
                     }
                 } catch (e: Exception) {
                     false

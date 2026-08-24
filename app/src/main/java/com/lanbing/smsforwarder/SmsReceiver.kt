@@ -374,7 +374,15 @@ class SmsReceiver : BroadcastReceiver() {
         val senderWhitelist = loadSenderFilterList(prefs, Constants.PREF_SENDER_WHITELIST)
         val senderBlacklist = loadSenderFilterList(prefs, Constants.PREF_SENDER_BLACKLIST)
         if (!MessageMatcher.passesGlobalSenderFilter(sender, senderWhitelist, senderBlacklist)) {
-            LogStore.append(context, "发送者 $sender 被全局过滤规则拦截，跳过转发")
+            LogStore.append(context, "发送者 $sender 被全局发送者过滤规则拦截，跳过转发")
+            return
+        }
+
+        // 全局内容过滤（白名单/黑名单）
+        val contentWhitelist = loadSenderFilterList(prefs, Constants.PREF_CONTENT_WHITELIST)
+        val contentBlacklist = loadSenderFilterList(prefs, Constants.PREF_CONTENT_BLACKLIST)
+        if (!MessageMatcher.passesGlobalContentFilter(fullMessage, contentWhitelist, contentBlacklist)) {
+            LogStore.append(context, "短信内容被全局内容过滤规则拦截，跳过转发")
             return
         }
 

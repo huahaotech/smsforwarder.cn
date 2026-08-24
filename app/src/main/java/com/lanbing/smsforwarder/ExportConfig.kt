@@ -32,5 +32,9 @@ data class ExportConfig(
     val highBatteryThreshold: Int,
     val customSim1Phone: String?,
     val customSim2Phone: String?,
-    val startOnBoot: Boolean
+    val startOnBoot: Boolean,
+    val senderWhitelist: List<String> = emptyList(),
+    val senderBlacklist: List<String> = emptyList(),
+    val contentWhitelist: List<String> = emptyList(),
+    val contentBlacklist: List<String> = emptyList()
 )

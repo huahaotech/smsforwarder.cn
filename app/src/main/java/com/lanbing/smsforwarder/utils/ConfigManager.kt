@@ -89,6 +89,30 @@ object ConfigManager {
             if (config.customSim1Phone != null) put("customSim1Phone", config.customSim1Phone)
             if (config.customSim2Phone != null) put("customSim2Phone", config.customSim2Phone)
             put("startOnBoot", config.startOnBoot)
+
+            // 发送者黑白名单
+            if (config.senderWhitelist.isNotEmpty()) {
+                val whitelistArr = JSONArray()
+                config.senderWhitelist.forEach { whitelistArr.put(it) }
+                put("senderWhitelist", whitelistArr)
+            }
+            if (config.senderBlacklist.isNotEmpty()) {
+                val blacklistArr = JSONArray()
+                config.senderBlacklist.forEach { blacklistArr.put(it) }
+                put("senderBlacklist", blacklistArr)
+            }
+
+            // 内容黑白名单
+            if (config.contentWhitelist.isNotEmpty()) {
+                val whitelistArr = JSONArray()
+                config.contentWhitelist.forEach { whitelistArr.put(it) }
+                put("contentWhitelist", whitelistArr)
+            }
+            if (config.contentBlacklist.isNotEmpty()) {
+                val blacklistArr = JSONArray()
+                config.contentBlacklist.forEach { blacklistArr.put(it) }
+                put("contentBlacklist", blacklistArr)
+            }
         }.toString(2) // 格式化输出，便于阅读
     }
 
@@ -249,6 +273,16 @@ object ConfigManager {
             val blacklistArr = json.optJSONArray("senderBlacklist")
             if (blacklistArr != null) {
                 editor.putString(Constants.PREF_SENDER_BLACKLIST, blacklistArr.toString())
+            }
+
+            // 导入内容黑白名单
+            val contentWhitelistArr = json.optJSONArray("contentWhitelist")
+            if (contentWhitelistArr != null) {
+                editor.putString(Constants.PREF_CONTENT_WHITELIST, contentWhitelistArr.toString())
+            }
+            val contentBlacklistArr = json.optJSONArray("contentBlacklist")
+            if (contentBlacklistArr != null) {
+                editor.putString(Constants.PREF_CONTENT_BLACKLIST, contentBlacklistArr.toString())
             }
 
             val sim1Phone = if (json.isNull("customSim1Phone")) "" else json.optString("customSim1Phone", "")

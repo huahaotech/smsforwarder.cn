@@ -58,6 +58,10 @@ object Constants {
     const val PREF_SENDER_WHITELIST = "sender_whitelist"
     const val PREF_SENDER_BLACKLIST = "sender_blacklist"
 
+    // 内容过滤（全局黑白名单，JSON 数组字符串存储）
+    const val PREF_CONTENT_WHITELIST = "content_whitelist"
+    const val PREF_CONTENT_BLACKLIST = "content_blacklist"
+
     // 电量提醒
     const val PREF_BATTERY_REMINDER_ENABLED = "battery_reminder_enabled"
     const val PREF_LOW_BATTERY_REMINDER_ENABLED = "low_battery_reminder_enabled"
