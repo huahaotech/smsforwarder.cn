@@ -1301,37 +1301,67 @@ fun SmsForwarderApp(
                                     Text("添加")
                                 }
                             }
-                            // 已添加列表（一行一个，完整显示）
+                            // 已添加列表（一行一个，完整显示，美化样式）
                             if (extraKws.isNotEmpty()) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(min = 40.dp, max = 200.dp)
                                         .verticalScroll(rememberScrollState()),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     extraKws.forEachIndexed { index, kw ->
                                         Surface(
                                             onClick = { extraKws.removeAt(index) },
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            ),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
+                                                // 序号标签
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    modifier = Modifier.size(22.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = "${index + 1}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
                                                 Text(
                                                     text = kw,
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Medium,
                                                     modifier = Modifier.weight(1f)
                                                 )
-                                                Icon(
-                                                    Icons.Outlined.Close,
-                                                    contentDescription = "删除",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
+                                                // 删除按钮
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            Icons.Outlined.Close,
+                                                            contentDescription = "删除",
+                                                            tint = MaterialTheme.colorScheme.error,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1339,16 +1369,31 @@ fun SmsForwarderApp(
                             } else {
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = "仅使用主关键词",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(12.dp),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f)
                                     )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Label,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "仅使用主关键词",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                             Text(
