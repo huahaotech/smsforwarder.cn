@@ -29,11 +29,20 @@ import org.json.JSONObject
  */
 object ChannelLoader {
 
+    // 缓存锁：保护所有缓存变量的并发访问
+    private val cacheLock = Any()
+
     // 内存缓存
+    @Volatile
     private var cachedChannels: List<Channel>? = null
+    @Volatile
     private var cachedConfigs: List<KeywordConfig>? = null
+    @Volatile
     private var cachedChannelMap: Map<String, Channel>? = null
+    @Volatile
     private var lastPrefsHash: Int = 0
+    @Volatile
+    private var cachedConfigsHash: Int = 0
 
     /**
      * 从 SharedPreferences 加载所有通道配置（带内存缓存）
@@ -41,14 +50,22 @@ object ChannelLoader {
     fun loadChannels(prefs: SharedPreferences): List<Channel> {
         val currentValue = prefs.getString(Constants.PREF_CHANNELS, "[]") ?: "[]"
         val hash = currentValue.hashCode()
-        if (cachedChannels != null && lastPrefsHash == hash) {
-            return cachedChannels!!
+        // 先做无锁快速检查（利用 volatile 的可见性）
+        val localCached = cachedChannels
+        if (localCached != null && lastPrefsHash == hash) {
+            return localCached
         }
-        val channels = parseChannels(currentValue)
-        cachedChannels = channels
-        cachedChannelMap = channels.associateBy { it.id }
-        lastPrefsHash = hash
-        return channels
+        synchronized(cacheLock) {
+            // 双重检查，避免重复解析
+            if (cachedChannels != null && lastPrefsHash == hash) {
+                return cachedChannels!!
+            }
+            val channels = parseChannels(currentValue)
+            cachedChannels = channels
+            cachedChannelMap = channels.associateBy { it.id }
+            lastPrefsHash = hash
+            return channels
+        }
     }
 
     /**
@@ -64,19 +81,23 @@ object ChannelLoader {
      */
     fun loadConfigs(prefs: SharedPreferences): List<KeywordConfig> {
         val currentValue = prefs.getString(Constants.PREF_KEYWORD_CONFIGS, "[]") ?: "[]"
-        // 使用独立的缓存变量避免与 channels 混用
         val hash = currentValue.hashCode()
-        if (cachedConfigs != null && cachedConfigsHash == hash) {
-            return cachedConfigs!!
+        // 先做无锁快速检查
+        val localCached = cachedConfigs
+        if (localCached != null && cachedConfigsHash == hash) {
+            return localCached
         }
-        val configs = parseConfigs(currentValue)
-        cachedConfigs = configs
-        cachedConfigsHash = hash
-        return configs
+        synchronized(cacheLock) {
+            // 双重检查
+            if (cachedConfigs != null && cachedConfigsHash == hash) {
+                return cachedConfigs!!
+            }
+            val configs = parseConfigs(currentValue)
+            cachedConfigs = configs
+            cachedConfigsHash = hash
+            return configs
+        }
     }
-
-    // configs 的缓存哈希
-    private var cachedConfigsHash: Int = 0
 
     private fun parseChannels(arrStr: String): List<Channel> {
         return try {
@@ -153,9 +174,11 @@ object ChannelLoader {
         val jsonStr = arr.toString()
         prefs.edit().putString(Constants.PREF_CHANNELS, jsonStr).apply()
         // 直接更新缓存，避免下次读取重新解析
-        cachedChannels = channels
-        cachedChannelMap = channels.associateBy { it.id }
-        lastPrefsHash = jsonStr.hashCode()
+        synchronized(cacheLock) {
+            cachedChannels = channels
+            cachedChannelMap = channels.associateBy { it.id }
+            lastPrefsHash = jsonStr.hashCode()
+        }
     }
 
     /**
@@ -181,8 +204,10 @@ object ChannelLoader {
         }
         val jsonStr = arr.toString()
         prefs.edit().putString(Constants.PREF_KEYWORD_CONFIGS, jsonStr).apply()
-        cachedConfigs = configs
-        cachedConfigsHash = jsonStr.hashCode()
+        synchronized(cacheLock) {
+            cachedConfigs = configs
+            cachedConfigsHash = jsonStr.hashCode()
+        }
         // 关键词变更，清理正则缓存
         MessageMatcher.clearRegexCache()
     }
@@ -191,10 +216,12 @@ object ChannelLoader {
      * 手动清除缓存（如配置变更后需要强制重新加载）
      */
     fun clearCache() {
-        cachedChannels = null
-        cachedConfigs = null
-        cachedChannelMap = null
-        lastPrefsHash = 0
-        cachedConfigsHash = 0
+        synchronized(cacheLock) {
+            cachedChannels = null
+            cachedConfigs = null
+            cachedChannelMap = null
+            lastPrefsHash = 0
+            cachedConfigsHash = 0
+        }
     }
 }

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.9.4-blue.svg)
+![Version](https://img.shields.io/badge/version-2.9.5-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -18,6 +18,7 @@
 ## ✨ 功能特性
 
 ### 🎯 核心功能
+- **快速创建引导** - 三步式向导，30 秒完成配置（选通道→填 Webhook→设关键词），新手零门槛
 - **多通道支持** - 企业微信、钉钉、飞书、通用 Webhook 四种转发通道
 - **关键词匹配** - 支持包含、精确、正则表达式、排除四种匹配模式
 - **多关键词组合** - AND/OR 逻辑组合，灵活控制匹配条件
@@ -57,6 +58,7 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.9.5** | 新增快速创建引导（三步式向导），无通道时首页显示快速创建入口，3 步完成通道+关键词配置；修复配置导入丢失大量字段的严重问题；修复 ChannelLoader 和 MessageMatcher 的线程安全问题；ModernCard 增加 onClick 支持。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.4** | 新增全局内容白名单/黑名单过滤；修复发送者黑白名单对带 +86 前缀号码匹配失效的问题（号码自动归一化）；修正发送者过滤 UI 描述示例；配置导入导出支持内容黑白名单。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.3** | 全局消息模板改为手动保存（保存按钮 + 重置按钮）；占位符点击插入到光标位置而非末尾；日志页头部布局优化，增加实时刷新状态标签；修复多项 UI 交互问题。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.2** | 新增正则表达式关键词匹配、发送者黑白名单过滤、多关键词 AND/OR 组合、自定义消息模板、通道测试按钮；全局消息模板编辑器替代原三开关；日志实时自动刷新；全面优化交互体验；多项性能和代码质量优化。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
@@ -97,9 +99,10 @@
 ### 安装步骤
 1. 下载 APK 并安装
 2. 打开应用，阅读并同意隐私政策（首次运行显示）
-3. 添加转发通道（企业微信/钉钉/飞书/Webhook）
-4. 配置关键词规则
-5. 开启转发服务（首次开启时会显示权限说明，引导到系统设置开启短信和通知权限）
+3. 点击首页「快速创建」按钮，按引导 3 步完成配置
+4. 开启转发服务（首次开启时会显示权限说明，引导到系统设置开启短信和通知权限）
+
+> 💡 **新手推荐**：使用首页的「快速创建」引导，只需填写 Webhook 地址，3 步即可完成全部配置。
 
 ### 权限说明
 | 权限 | 用途 | 是否必需 |
@@ -297,6 +300,9 @@ A: 在关键词编辑对话框的「匹配测试」区域，输入测试短信�
 
 ### Q: 如何在多个设备间同步配置？
 A: 使用配置导入导出功能：在源设备点击「导出配置」保存到下载目录或复制文本，在目标设备点击「导入配置」选择文件或粘贴文本即可完成配置迁移。
+
+### Q: 第一次使用怎么配置最快？
+A: 打开应用后，在首页点击「快速创建」卡片，按三步向导操作：选择通道类型 → 粘贴 Webhook 地址 → 输入关键词（可选），点「完成」即可。整个过程只需 30 秒。
 
 ---
 

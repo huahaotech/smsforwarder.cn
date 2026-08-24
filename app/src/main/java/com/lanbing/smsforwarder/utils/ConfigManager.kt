@@ -21,6 +21,9 @@ import com.lanbing.smsforwarder.Constants
 import com.lanbing.smsforwarder.ExportConfig
 import com.lanbing.smsforwarder.KeywordConfig
 import com.lanbing.smsforwarder.LogStore
+import com.lanbing.smsforwarder.MatchLogic
+import com.lanbing.smsforwarder.MatchMode
+import com.lanbing.smsforwarder.SenderMatchMode
 import com.lanbing.smsforwarder.R
 import com.lanbing.smsforwarder.BuildConfig
 import org.json.JSONArray
@@ -210,12 +213,14 @@ object ConfigManager {
                 val chObj = channelsArr.getJSONObject(i)
                 val typeStr = chObj.optString("type", "WECHAT")
                 val type = try { ChannelType.valueOf(typeStr) } catch (_: Throwable) { ChannelType.WECHAT }
+                val messageTemplate = chObj.optString("messageTemplate", null)?.takeIf { it.isNotBlank() }
                 channels.add(
                     Channel(
                         id = chObj.getString("id"),
                         name = chObj.getString("name"),
                         type = type,
-                        target = chObj.getString("target")
+                        target = chObj.getString("target"),
+                        messageTemplate = messageTemplate
                     )
                 )
             }
@@ -224,11 +229,39 @@ object ConfigManager {
             val configsArr = json.optJSONArray("keywordConfigs") ?: JSONArray()
             for (i in 0 until configsArr.length()) {
                 val cfgObj = configsArr.getJSONObject(i)
+
+                val matchModeStr = cfgObj.optString("matchMode", "CONTAINS")
+                val matchMode = try { MatchMode.valueOf(matchModeStr) } catch (_: Throwable) { MatchMode.CONTAINS }
+
+                val matchLogicStr = cfgObj.optString("matchLogic", "OR")
+                val matchLogic = try { MatchLogic.valueOf(matchLogicStr) } catch (_: Throwable) { MatchLogic.OR }
+
+                val senderMatchModeStr = cfgObj.optString("senderMatchMode", "CONTAINS")
+                val senderMatchMode = try { SenderMatchMode.valueOf(senderMatchModeStr) } catch (_: Throwable) { SenderMatchMode.CONTAINS }
+
+                // 解析 extraKeywords 数组
+                val extraKeywords = mutableListOf<String>()
+                val extraArr = cfgObj.optJSONArray("extraKeywords")
+                if (extraArr != null) {
+                    for (j in 0 until extraArr.length()) {
+                        extraKeywords.add(extraArr.getString(j))
+                    }
+                }
+
+                val senderPattern = cfgObj.optString("senderPattern", null)?.takeIf { it.isNotBlank() }
+                val enabled = cfgObj.optBoolean("enabled", true)
+
                 configs.add(
                     KeywordConfig(
                         id = cfgObj.getString("id"),
                         keyword = cfgObj.getString("keyword"),
-                        channelId = cfgObj.getString("channelId")
+                        channelId = cfgObj.getString("channelId"),
+                        matchMode = matchMode,
+                        matchLogic = matchLogic,
+                        extraKeywords = extraKeywords,
+                        senderPattern = senderPattern,
+                        senderMatchMode = senderMatchMode,
+                        enabled = enabled
                     )
                 )
             }

@@ -350,6 +350,7 @@ fun SmsForwarderApp(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showBootTipDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
+    var showQuickSetupDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
@@ -561,7 +562,9 @@ fun SmsForwarderApp(
                                 }
                                 context.startActivity(intent)
                             }
-                        }
+                        },
+                        onQuickSetup = { showQuickSetupDialog = true },
+                        hasChannels = channels.isNotEmpty()
                     )
                     1 -> KeywordTab(
                         channels = channels,
@@ -1583,7 +1586,52 @@ fun SmsForwarderApp(
             }
         )
     }
-    
+
+    // 快速创建引导对话框
+    if (showQuickSetupDialog) {
+        val ctx = LocalContext.current
+        QuickSetupDialog(
+            onDismiss = { showQuickSetupDialog = false },
+            onComplete = { channelType, webhookUrl, channelName, keyword ->
+                showQuickSetupDialog = false
+
+                // 1. 创建通道
+                val channelId = UUID.randomUUID().toString()
+                val newChannel = Channel(
+                    id = channelId,
+                    name = channelName,
+                    type = channelType,
+                    target = webhookUrl
+                )
+                val updatedChannels = channels + newChannel
+                ChannelLoader.saveChannels(prefs, updatedChannels)
+                channels = updatedChannels
+
+                // 2. 创建关键词规则
+                val configId = UUID.randomUUID().toString()
+                val newConfig = KeywordConfig(
+                    id = configId,
+                    keyword = keyword,
+                    channelId = channelId
+                )
+                val updatedConfigs = configs + newConfig
+                ChannelLoader.saveConfigs(prefs, updatedConfigs)
+                configs = updatedConfigs
+
+                LogStore.append(
+                    ctx,
+                    "快速创建完成：通道「${channelName}」+ 关键词「${if (keyword.isBlank()) "全部转发" else keyword}」"
+                )
+
+                // 3. 弹出提示
+                Toast.makeText(ctx, "配置成功！可以开启转发服务了", Toast.LENGTH_LONG).show()
+
+                // 4. 切换到关键词 Tab 让用户看到结果
+                // （通过 selectedTab 状态切换，这里简化为 Toast 提示）
+            }
+        )
+    }
+
     // 权限说明对话框
     if (showPermissionDialog) {
         val ctx = LocalContext.current
@@ -2652,15 +2700,18 @@ fun LogTab(
 @Composable
 fun ModernCard(
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
+        onClick = onClick ?: {},
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(2.dp),
+        enabled = onClick != null
     ) {
         Column {
             content()
@@ -3708,7 +3759,9 @@ fun HomeTab(
     isIgnoringBatteryOptimizations: Boolean,
     onRequestSmsPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
-    onRequestBatteryOptimization: () -> Unit
+    onRequestBatteryOptimization: () -> Unit,
+    onQuickSetup: () -> Unit,
+    hasChannels: Boolean
 ) {
     LazyColumn(
         modifier = Modifier
@@ -3820,6 +3873,57 @@ fun HomeTab(
                         Switch(
                             checked = startOnBoot,
                             onCheckedChange = onStartOnBootChange
+                        )
+                    }
+                }
+            }
+        }
+
+        // 快速创建引导入口（无通道时显示）
+        if (!hasChannels) {
+            item {
+                ModernCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onQuickSetup
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    Color(0xFFEEF2FF),
+                                    shape = RoundedCornerShape(12.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFF667EEA),
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "快速创建",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "3 步完成配置，立即开始转发短信",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            Icons.Outlined.ArrowForward,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -5537,6 +5641,371 @@ fun CollapsibleSection(
             Spacer(modifier = Modifier.height(4.dp))
             Column(content = content)
         }
+    }
+}
+
+/**
+ * 快速创建引导对话框（三步式向导）
+ *
+ * 步骤 1：选择通道类型
+ * 步骤 2：填写 Webhook 地址
+ * 步骤 3：配置关键词（可选）
+ */
+@Composable
+fun QuickSetupDialog(
+    onDismiss: () -> Unit,
+    onComplete: (channelType: ChannelType, webhookUrl: String, channelName: String, keyword: String) -> Unit
+) {
+    var currentStep by remember { mutableIntStateOf(1) }
+    var selectedType by remember { mutableStateOf(ChannelType.WECHAT) }
+    var webhookUrl by remember { mutableStateOf("") }
+    var channelName by remember { mutableStateOf("") }
+    var keyword by remember { mutableStateOf("") }
+    var urlError by remember { mutableStateOf<String?>(null) }
+
+    val stepTitles = listOf("选择通道类型", "填写 Webhook 地址", "配置关键词")
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                // 标题
+                Text(
+                    text = stepTitles[currentStep - 1],
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "第 $currentStep 步，共 3 步",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 进度指示器
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(3) { index ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .background(
+                                    color = if (index < currentStep) Color(0xFF667EEA) else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 步骤内容
+                when (currentStep) {
+                    1 -> {
+                        // 步骤 1：选择通道类型
+                        ChannelTypeSelector(
+                            selectedType = selectedType,
+                            onTypeSelected = { selectedType = it }
+                        )
+                    }
+                    2 -> {
+                        // 步骤 2：填写 Webhook 地址
+                        StepTwoContent(
+                            webhookUrl = webhookUrl,
+                            onUrlChange = {
+                                webhookUrl = it
+                                urlError = null
+                            },
+                            channelName = channelName,
+                            onNameChange = { channelName = it },
+                            urlError = urlError,
+                            selectedType = selectedType
+                        )
+                    }
+                    3 -> {
+                        // 步骤 3：配置关键词
+                        StepThreeContent(
+                            keyword = keyword,
+                            onKeywordChange = { keyword = it },
+                            channelName = channelName.ifBlank { defaultChannelName(selectedType) },
+                            channelType = selectedType,
+                            webhookUrl = webhookUrl
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 底部按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    if (currentStep > 1) {
+                        TextButton(onClick = { currentStep-- }) {
+                            Text("上一步")
+                        }
+                    } else {
+                        TextButton(onClick = onDismiss) {
+                            Text("取消")
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            when (currentStep) {
+                                1 -> currentStep = 2
+                                2 -> {
+                                    if (webhookUrl.isBlank()) {
+                                        urlError = "请输入 Webhook 地址"
+                                    } else if (!WebhookSender.isValidUrl(webhookUrl)) {
+                                        urlError = "Webhook 地址格式不正确"
+                                    } else {
+                                        currentStep = 3
+                                    }
+                                }
+                                3 -> {
+                                    val name = channelName.ifBlank { defaultChannelName(selectedType) }
+                                    onComplete(selectedType, webhookUrl.trim(), name, keyword.trim())
+                                }
+                            }
+                        }
+                    ) {
+                        Text(if (currentStep == 3) "完成" else "下一步")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun defaultChannelName(type: ChannelType): String {
+    return when (type) {
+        ChannelType.WECHAT -> "企业微信"
+        ChannelType.DINGTALK -> "钉钉"
+        ChannelType.FEISHU -> "飞书"
+        ChannelType.GENERIC_WEBHOOK -> "通用 Webhook"
+    }
+}
+
+@Composable
+private fun ChannelTypeSelector(
+    selectedType: ChannelType,
+    onTypeSelected: (ChannelType) -> Unit
+) {
+    val types = listOf(
+        Triple(ChannelType.WECHAT, "企业微信", "最常用，推荐使用"),
+        Triple(ChannelType.DINGTALK, "钉钉", "钉钉群机器人"),
+        Triple(ChannelType.FEISHU, "飞书", "飞书群机器人"),
+        Triple(ChannelType.GENERIC_WEBHOOK, "通用 Webhook", "自定义 HTTP 接口")
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        types.forEach { (type, name, desc) ->
+            val isSelected = selectedType == type
+            Surface(
+                onClick = { onTypeSelected(type) },
+                shape = MaterialTheme.shapes.large,
+                color = if (isSelected) Color(0xFFEEF2FF) else MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    width = if (isSelected) 2.dp else 1.dp,
+                    color = if (isSelected) Color(0xFF667EEA) else MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = when (type) {
+                            ChannelType.WECHAT -> Icons.Outlined.Chat
+                            ChannelType.DINGTALK -> Icons.Outlined.Groups
+                            ChannelType.FEISHU -> Icons.Outlined.Send
+                            ChannelType.GENERIC_WEBHOOK -> Icons.Outlined.Language
+                        },
+                        contentDescription = null,
+                        tint = if (isSelected) Color(0xFF667EEA) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (isSelected) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF667EEA)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepTwoContent(
+    webhookUrl: String,
+    onUrlChange: (String) -> Unit,
+    channelName: String,
+    onNameChange: (String) -> Unit,
+    urlError: String?,
+    selectedType: ChannelType
+) {
+    Column {
+        Text(
+            text = "通道名称（可选）",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = channelName,
+            onValueChange = onNameChange,
+            placeholder = { Text("留空使用默认名称") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Webhook 地址",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = webhookUrl,
+            onValueChange = onUrlChange,
+            placeholder = {
+                Text(
+                    when (selectedType) {
+                        ChannelType.WECHAT -> "https://qyapi.weixin.qq.com/..."
+                        ChannelType.DINGTALK -> "https://oapi.dingtalk.com/..."
+                        ChannelType.FEISHU -> "https://open.feishu.cn/..."
+                        ChannelType.GENERIC_WEBHOOK -> "https://your-webhook-url.com/..."
+                    }
+                )
+            },
+            isError = urlError != null,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+        if (urlError != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = urlError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "不知道怎么获取 Webhook？在对应群聊中添加「群机器人」，复制机器人的 Webhook 地址粘贴到这里即可。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun StepThreeContent(
+    keyword: String,
+    onKeywordChange: (String) -> Unit,
+    channelName: String,
+    channelType: ChannelType,
+    webhookUrl: String
+) {
+    Column {
+        Text(
+            text = "关键词（可选）",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = keyword,
+            onValueChange = onKeywordChange,
+            placeholder = { Text("留空则转发全部短信") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "例如输入「验证码」，则只有包含验证码的短信才会转发。留空则所有短信都转发。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 配置摘要
+        ModernCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "配置摘要",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                SummaryRow("通道类型", defaultChannelName(channelType))
+                Spacer(modifier = Modifier.height(6.dp))
+                SummaryRow("通道名称", channelName)
+                Spacer(modifier = Modifier.height(6.dp))
+                SummaryRow(
+                    "关键词",
+                    keyword.ifBlank { "全部转发" }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(80.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

@@ -32,7 +32,8 @@ object MessageMatcher {
     private const val TAG = "MessageMatcher"
 
     // 正则表达式缓存：pattern string -> compiled Regex
-    private val regexCache = mutableMapOf<String, Regex>()
+    // 使用 ConcurrentHashMap 保证多线程安全
+    private val regexCache = java.util.concurrent.ConcurrentHashMap<String, Regex>()
 
     /**
      * 判断一条关键词规则是否匹配给定的短信
