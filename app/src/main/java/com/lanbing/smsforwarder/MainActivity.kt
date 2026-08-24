@@ -1301,46 +1301,38 @@ fun SmsForwarderApp(
                                     Text("添加")
                                 }
                             }
-                            // 已添加列表（Chip 横向滚动）
+                            // 已添加列表（一行一个，完整显示）
                             if (extraKws.isNotEmpty()) {
-                                Box(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(min = 40.dp, max = 120.dp)
-                                        .verticalScroll(rememberScrollState())
+                                        .heightIn(min = 40.dp, max = 200.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Column {
-                                        extraKws.chunked(3).forEach { row ->
+                                    extraKws.forEachIndexed { index, kw ->
+                                        Surface(
+                                            onClick = { extraKws.removeAt(index) },
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
                                             Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                row.forEachIndexed { idx, kw ->
-                                                    val globalIdx = extraKws.indexOf(kw)
-                                                    AssistChip(
-                                                        onClick = { if (globalIdx >= 0) extraKws.removeAt(globalIdx) },
-                                                        label = {
-                                                            Text(
-                                                                text = kw,
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                maxLines = 1,
-                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                                            )
-                                                        },
-                                                        trailingIcon = {
-                                                            Icon(
-                                                                Icons.Outlined.Close,
-                                                                contentDescription = "删除",
-                                                                modifier = Modifier.size(14.dp)
-                                                            )
-                                                        },
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                }
-                                                repeat(3 - row.size) { Spacer(modifier = Modifier.weight(1f)) }
+                                                Text(
+                                                    text = kw,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Icon(
+                                                    Icons.Outlined.Close,
+                                                    contentDescription = "删除",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
                                             }
-                                            Spacer(modifier = Modifier.height(4.dp))
                                         }
                                     }
                                 }
@@ -1595,11 +1587,20 @@ fun SmsForwarderApp(
             onComplete = { channelType, webhookUrl, channelName, keyword ->
                 showQuickSetupDialog = false
 
-                // 1. 创建通道
+                // 1. 处理通道名称重名，自动加序号
+                val existingNames = channels.map { it.name }
+                var finalName = channelName
+                var suffix = 2
+                while (finalName in existingNames) {
+                    finalName = "$channelName $suffix"
+                    suffix++
+                }
+
+                // 2. 创建通道
                 val channelId = UUID.randomUUID().toString()
                 val newChannel = Channel(
                     id = channelId,
-                    name = channelName,
+                    name = finalName,
                     type = channelType,
                     target = webhookUrl
                 )
@@ -1607,7 +1608,7 @@ fun SmsForwarderApp(
                 ChannelLoader.saveChannels(prefs, updatedChannels)
                 channels = updatedChannels
 
-                // 2. 创建关键词规则
+                // 3. 创建关键词规则
                 val configId = UUID.randomUUID().toString()
                 val newConfig = KeywordConfig(
                     id = configId,
@@ -1620,14 +1621,11 @@ fun SmsForwarderApp(
 
                 LogStore.append(
                     ctx,
-                    "快速创建完成：通道「${channelName}」+ 关键词「${if (keyword.isBlank()) "全部转发" else keyword}」"
+                    "快速创建完成：通道「${finalName}」+ 关键词「${if (keyword.isBlank()) "全部转发" else keyword}」"
                 )
 
-                // 3. 弹出提示
+                // 4. 弹出提示
                 Toast.makeText(ctx, "配置成功！可以开启转发服务了", Toast.LENGTH_LONG).show()
-
-                // 4. 切换到关键词 Tab 让用户看到结果
-                // （通过 selectedTab 状态切换，这里简化为 Toast 提示）
             }
         )
     }
@@ -3220,7 +3218,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    "轻量、稳定、开源的 Android 短信转发应用。支持企业微信、钉钉、飞书和自定义 Webhook 等多种转发渠道，支持关键词过滤、验证码提取、本机号码识别等功能。",
+                    "轻量、稳定、开源的 Android 短信转发应用。支持企业微信、钉钉、飞书和自定义 Webhook 等多种转发渠道，支持关键词匹配、黑白名单过滤、验证码提取、消息模板自定义、快速创建引导等功能。",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -3879,53 +3877,51 @@ fun HomeTab(
             }
         }
 
-        // 快速创建引导入口（无通道时显示）
-        if (!hasChannels) {
-            item {
-                ModernCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onQuickSetup
+        // 快速创建引导入口
+        item {
+            ModernCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onQuickSetup
+            ) {
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(20.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                Color(0xFFEEF2FF),
+                                shape = RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    Color(0xFFEEF2FF),
-                                    shape = RoundedCornerShape(12.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Outlined.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color(0xFF667EEA),
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "快速创建",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "3 步完成配置，立即开始转发短信",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                         Icon(
-                            Icons.Outlined.ArrowForward,
+                            Icons.Outlined.AutoAwesome,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = Color(0xFF667EEA),
+                            modifier = Modifier.size(26.dp)
                         )
                     }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "快速创建",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "3 步完成配置，快速添加通道和规则",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Outlined.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -4990,6 +4986,7 @@ fun SettingsTab(
                     title = "发送者白名单",
                     description = "只有匹配的发送者号码才会被转发。每行一个规则，支持通配符（如 106*、138*）",
                     items = senderWhitelist,
+                    ruleType = FilterRuleType.SENDER_WHITELIST,
                     onDismiss = { showWhitelistDialog = false },
                     onSave = { list ->
                         onSenderWhitelistChange(list)
@@ -5004,6 +5001,7 @@ fun SettingsTab(
                     title = "发送者黑名单",
                     description = "匹配的发送者号码会被直接拦截，不会转发。每行一个规则，支持通配符（如 106*、400*）",
                     items = senderBlacklist,
+                    ruleType = FilterRuleType.SENDER_BLACKLIST,
                     onDismiss = { showBlacklistDialog = false },
                     onSave = { list ->
                         onSenderBlacklistChange(list)
@@ -5101,6 +5099,7 @@ fun SettingsTab(
                     title = "内容白名单",
                     description = "只有内容匹配的短信才会被转发。每行一个规则，支持通配符（如 *验证码*、*银行*）",
                     items = contentWhitelist,
+                    ruleType = FilterRuleType.CONTENT_WHITELIST,
                     onDismiss = { showContentWhitelistDialog = false },
                     onSave = { list ->
                         onContentWhitelistChange(list)
@@ -5115,6 +5114,7 @@ fun SettingsTab(
                     title = "内容黑名单",
                     description = "内容匹配的短信会被直接拦截，不会转发。每行一个规则，支持通配符（如 *推销*、*贷款*）",
                     items = contentBlacklist,
+                    ruleType = FilterRuleType.CONTENT_BLACKLIST,
                     onDismiss = { showContentBlacklistDialog = false },
                     onSave = { list ->
                         onContentBlacklistChange(list)
@@ -6010,21 +6010,53 @@ private fun SummaryRow(label: String, value: String) {
 }
 
 /**
- * 发送者过滤编辑对话框
+ * 过滤规则类型：用于区分快捷规则的预设内容
+ */
+enum class FilterRuleType {
+    SENDER_WHITELIST,   // 发送者白名单（信任的号码）
+    SENDER_BLACKLIST,   // 发送者黑名单（拦截的号码）
+    CONTENT_WHITELIST,  // 内容白名单（信任的关键词）
+    CONTENT_BLACKLIST   // 内容黑名单（拦截的关键词）
+}
+
+/**
+ * 发送者/内容过滤编辑对话框
  */
 @Composable
 fun SenderFilterDialog(
     title: String,
     description: String,
     items: List<String>,
+    ruleType: FilterRuleType = FilterRuleType.SENDER_WHITELIST,
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
     val rules = remember { mutableStateListOf<String>().apply { addAll(items) } }
     var newRule by remember { mutableStateOf("") }
 
-    // 快捷规则（常用预设）
-    val quickRules = listOf("106*", "955*", "12306", "10086", "10000", "10010", "*银行*", "*快递*")
+    // 快捷规则（根据类型显示不同的预设，白名单正向、黑名单负向）
+    val quickRules = when (ruleType) {
+        FilterRuleType.SENDER_WHITELIST -> listOf(
+            "10086", "10000", "10010", "955*", "12306", "12345", "96110", "138*", "139*"
+        )
+        FilterRuleType.SENDER_BLACKLIST -> listOf(
+            "106*", "170*", "167*", "171*", "955*", "400*", "950*", "951*", "952*", "957*", "+00*", "00*"
+        )
+        FilterRuleType.CONTENT_WHITELIST -> listOf(
+            "*验证码*", "*银行*", "*订单*", "*快递*", "*支付*", "*税务*", "*市场监督*", "*外卖*", "*机票*", "*通知*"
+        )
+        FilterRuleType.CONTENT_BLACKLIST -> listOf(
+            "*拒收回*", "*推销*", "*贷款*", "*保险*", "*赌场*", "*中奖*", "*刷单*", "*博彩*", "*免费领取*"
+        )
+    }
+
+    // 输入框 placeholder
+    val placeholderText = when (ruleType) {
+        FilterRuleType.SENDER_WHITELIST -> "如：10086、955*"
+        FilterRuleType.SENDER_BLACKLIST -> "如：106*、400*"
+        FilterRuleType.CONTENT_WHITELIST -> "如：*验证码*"
+        FilterRuleType.CONTENT_BLACKLIST -> "如：*推销*"
+    }
 
     fun addRule(rule: String) {
         val trimmed = rule.trim()
@@ -6056,7 +6088,7 @@ fun SenderFilterDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
-                        placeholder = { Text("如：106*") },
+                        placeholder = { Text(placeholderText) },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
                             onDone = {
