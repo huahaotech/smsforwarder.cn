@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.9.6-blue.svg)
+![Version](https://img.shields.io/badge/version-2.9.8-blue.svg)
 ![Android](https://img.shields.io/badge/Android-5.0%2B-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 [![GitHub Stars](https://img.shields.io/github/stars/jinghong-me/smsforwarder.cn?style=social)](https://github.com/jinghong-me/smsforwarder.cn/stargazers)
@@ -58,6 +58,8 @@
 ### 最新版本
 | 版本 | 说明 | 下载链接 |
 |------|------|----------|
+| **v2.9.8** | 修复全局文字变灰问题（ModernCard 禁用状态导致透明度异常）；额外关键词列表美化（序号标签+卡片样式）；黑白名单快捷插入优化（发送者/内容分别预设正向/负向规则，白名单信任类、黑名单拦截类）；快速创建入口改为常驻显示，随时可快捷添加；快速创建通道名称自动去重。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
+| **v2.9.7** | 额外关键词列表改为一行一个完整显示；发送者号码自动归一化兼容 +86 前缀；关于页面简介更新。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.6** | 黑白名单快捷插入体验优化（发送者/内容分别预设正向/负向规则，白名单信任类、黑名单拦截类）；快速创建入口改为常驻显示，随时可快捷添加；快速创建通道名称自动去重；额外关键词列表改为一行一个完整显示；发送者号码自动归一化兼容 +86 前缀；关于页面简介更新。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.5** | 新增快速创建引导（三步式向导），无通道时首页显示快速创建入口，3 步完成通道+关键词配置；修复配置导入丢失大量字段的严重问题；修复 ChannelLoader 和 MessageMatcher 的线程安全问题；ModernCard 增加 onClick 支持。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
 | **v2.9.4** | 新增全局内容白名单/黑名单过滤；修复发送者黑白名单对带 +86 前缀号码匹配失效的问题（号码自动归一化）；修正发送者过滤 UI 描述示例；配置导入导出支持内容黑白名单。 | [Releases](https://github.com/jinghong-me/smsforwarder.cn/releases) |
