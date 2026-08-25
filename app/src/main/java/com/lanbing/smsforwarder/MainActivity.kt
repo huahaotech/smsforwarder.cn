@@ -131,7 +131,27 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isDarkTheme = isSystemInDarkTheme()
-            val colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
+            val colorScheme = if (isDarkTheme) {
+                darkColorScheme()
+            } else {
+                lightColorScheme(
+                    primary = Color(0xFF667EEA),
+                    onPrimary = Color.White,
+                    primaryContainer = Color(0xFFE0E7FF),
+                    onPrimaryContainer = Color(0xFF1E3A8A),
+                    secondary = Color(0xFF764BA2),
+                    onSecondary = Color.White,
+                    background = Color(0xFFFFFBFE),
+                    onBackground = Color(0xFF1C1B1F),
+                    surface = Color(0xFFFFFBFE),
+                    onSurface = Color(0xFF1C1B1F),
+                    surfaceVariant = Color(0xFFE7E0EC),
+                    onSurfaceVariant = Color(0xFF49454F),
+                    outline = Color(0xFF79747E),
+                    error = Color(0xFFBA1A1A),
+                    onError = Color.White
+                )
+            }
             var permissionUpdateTrigger by remember { mutableStateOf(0) }
             var configUpdateTrigger by remember { mutableStateOf(0) }
 
@@ -1345,6 +1365,7 @@ fun SmsForwarderApp(
                                                     text = kw,
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     modifier = Modifier.weight(1f)
                                                 )
                                                 // 删除按钮
@@ -2746,18 +2767,30 @@ fun ModernCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        onClick = onClick ?: {},
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(2.dp),
-        enabled = onClick != null
-    ) {
-        Column {
-            content()
+    if (onClick != null) {
+        Card(
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column {
+                content()
+            }
+        }
+    } else {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 2.dp
+        ) {
+            Column {
+                content()
+            }
         }
     }
 }
